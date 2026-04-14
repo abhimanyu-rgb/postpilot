@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Environment
+.env
+
+# Data (local runtime data, not committed)
+data/app.db
+data/sources/
+data/historical/
+data/drafts/
+data/logs/
+data/exports/
+data/backups/
+
+# Node / Next.js
+app/frontend/node_modules/
+app/frontend/.next/
+app/frontend/out/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
