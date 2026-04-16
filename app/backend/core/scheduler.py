@@ -126,6 +126,13 @@ def process_publish_queue() -> None:
             if remaining_budget <= 0:
                 break
 
+            # Re-check min gap before each publish (not just at the start)
+            last = db.query(PublishedPost).order_by(PublishedPost.published_at.desc()).first()
+            if last and last.published_at:
+                if datetime.now(timezone.utc) < last.published_at + timedelta(minutes=min_gap):
+                    logger.debug("Min gap not met for next draft, stopping queue processing")
+                    break
+
             # Get the campaign for this draft to check posting window
             sel = (
                 db.query(SelectedOpportunity)
