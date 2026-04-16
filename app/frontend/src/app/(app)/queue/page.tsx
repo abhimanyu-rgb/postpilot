@@ -43,6 +43,9 @@ export default function QueuePage() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [actionLoading, setActionLoading] = useState<number | null>(null);
 
+  // Preview mode
+  const [previewId, setPreviewId] = useState<number | null>(null);
+
   // Edit state
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
@@ -64,6 +67,7 @@ export default function QueuePage() {
 
   // Drift check state
   const [driftResults, setDriftResults] = useState<Record<number, { has_drift: boolean; severity?: string; explanation?: string }>>({});
+  const [dupResults, setDupResults] = useState<Record<number, { has_overlap: boolean; similarity?: number; similar_headline?: string; published_date?: string }>>({});
 
   // Media state
   const [mediaForId, setMediaForId] = useState<number | null>(null);
@@ -76,14 +80,17 @@ export default function QueuePage() {
       .get<DraftItem[]>("/api/drafts/?status=pending_review")
       .then((data) => {
         setDrafts(data);
-        // Check drift for each draft in background
+        // Check drift and duplicates for each draft in background
         data.forEach((d) => {
           api.get<{ has_drift: boolean; severity?: string; explanation?: string }>(
             `/api/drafts/${d.id}/drift-check`
           ).then((result) => {
-            if (result.has_drift) {
-              setDriftResults((prev) => ({ ...prev, [d.id]: result }));
-            }
+            if (result.has_drift) setDriftResults((prev) => ({ ...prev, [d.id]: result }));
+          }).catch(() => {});
+          api.get<{ has_overlap: boolean; similarity?: number; similar_headline?: string; published_date?: string }>(
+            `/api/drafts/${d.id}/duplicate-check`
+          ).then((result) => {
+            if (result.has_overlap) setDupResults((prev) => ({ ...prev, [d.id]: result }));
           }).catch(() => {});
         });
       })
@@ -365,6 +372,23 @@ export default function QueuePage() {
                   </div>
                 )}
 
+                {/* Duplicate detection warning */}
+                {dupResults[draft.id]?.has_overlap && (
+                  <div className="mx-4 mb-2 rounded-lg bg-orange-50 border border-orange-200 px-3 py-2 flex items-start gap-2 animate-fade-in">
+                    <svg className="w-4 h-4 text-orange-500 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    <div>
+                      <p className="text-[11px] font-medium text-orange-800">
+                        Similar content ({dupResults[draft.id].similarity}% overlap)
+                      </p>
+                      <p className="text-[10px] text-orange-600 mt-0.5">
+                        Published {dupResults[draft.id].published_date}: &quot;{dupResults[draft.id].similar_headline}&quot;
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Approval schedule banner */}
                 {approvalInfo?.id === draft.id && (
                   <div className="mx-5 mb-3 rounded-lg bg-indigo-50 border border-indigo-200 px-4 py-3 animate-fade-in">
@@ -382,7 +406,7 @@ export default function QueuePage() {
                   </div>
                 )}
 
-                {/* Draft text — editable or read-only */}
+                {/* Draft text — edit / plain / linkedin preview */}
                 <div className="px-4 pb-2.5">
                   {isEditing ? (
                     <div className="space-y-2">
@@ -392,40 +416,109 @@ export default function QueuePage() {
                         rows={10}
                         className="w-full rounded-lg border border-indigo-300 p-4 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 resize-none font-mono leading-relaxed"
                       />
+                      {/* Character counter with fold indicator */}
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-gray-400">{editText.length} chars</span>
+                        <div className="flex items-center gap-3">
+                          <span className={`text-xs ${editText.length > 3000 ? "text-rose-500 font-medium" : "text-gray-400"}`}>{editText.length} / 3,000</span>
+                          <span className={`text-[10px] ${editText.length <= 210 ? "text-emerald-500" : "text-amber-500"}`}>
+                            Fold at 210 chars {editText.length > 210 ? `(+${editText.length - 210} below fold)` : "(all above fold)"}
+                          </span>
+                        </div>
                         <div className="flex gap-2">
-                          <button
-                            onClick={() => setEditingId(null)}
-                            className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            onClick={() => saveEdit(draft.id)}
-                            disabled={savingEdit}
-                            className="rounded-lg bg-gradient-to-r from-indigo-500 to-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:from-indigo-600 hover:to-violet-700 disabled:opacity-50 flex items-center gap-1.5"
-                          >
+                          <button onClick={() => setEditingId(null)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50">Cancel</button>
+                          <button onClick={() => saveEdit(draft.id)} disabled={savingEdit}
+                            className="rounded-lg bg-gradient-to-r from-indigo-500 to-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:from-indigo-600 hover:to-violet-700 disabled:opacity-50 flex items-center gap-1.5">
                             {savingEdit && <div className="animate-spin w-3 h-3 border-2 border-white border-t-transparent rounded-full" />}
                             Save Edit
                           </button>
                         </div>
                       </div>
+                      {/* Fold preview line */}
+                      {editText.length > 210 && (
+                        <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-[10px] text-amber-700">
+                          <span className="font-medium">Above the fold:</span> {editText.slice(0, 210)}
+                          <span className="text-amber-400"> ...see more</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : previewId === draft.id ? (
+                    /* LinkedIn preview mockup */
+                    <div className="relative rounded-lg border border-gray-200 bg-white p-0 max-w-[500px] mx-auto shadow-sm">
+                      <button onClick={() => setPreviewId(null)} className="absolute top-2 right-2 z-10 rounded-full bg-gray-100 p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-200" title="Close preview">
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                      </button>
+                      {/* LinkedIn header */}
+                      <div className="flex items-center gap-2.5 px-4 pt-3 pb-2">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-400 to-violet-500 flex items-center justify-center text-white text-sm font-bold">
+                          {draft.campaign_name.charAt(0)}
+                        </div>
+                        <div>
+                          <p className="text-[13px] font-semibold text-gray-900 leading-tight">Your Name</p>
+                          <p className="text-[11px] text-gray-500 leading-tight">Your headline on LinkedIn</p>
+                          <p className="text-[10px] text-gray-400">Just now</p>
+                        </div>
+                      </div>
+                      {/* Post text with fold */}
+                      <div className="px-4 pb-3">
+                        {draft.primary_text.length <= 210 ? (
+                          <p className="text-[13px] text-gray-900 whitespace-pre-wrap leading-[1.4]">{draft.primary_text}</p>
+                        ) : (
+                          <div>
+                            <p className="text-[13px] text-gray-900 whitespace-pre-wrap leading-[1.4]">
+                              {draft.primary_text.slice(0, 210)}
+                              <span className="text-[13px] text-gray-500 font-medium cursor-pointer">...see more</span>
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      {/* LinkedIn reaction bar */}
+                      <div className="border-t border-gray-100 px-4 py-2 flex items-center justify-between">
+                        <div className="flex gap-0.5">
+                          <span className="text-[11px]">👍</span><span className="text-[11px]">❤️</span><span className="text-[11px]">💡</span>
+                          <span className="text-[11px] text-gray-500 ml-1">23</span>
+                        </div>
+                        <span className="text-[11px] text-gray-500">4 comments</span>
+                      </div>
+                      {/* LinkedIn actions */}
+                      <div className="border-t border-gray-100 px-2 py-1 flex justify-between">
+                        {["Like", "Comment", "Repost", "Send"].map((a) => (
+                          <button key={a} className="flex-1 text-center py-1.5 text-[11px] font-medium text-gray-500 rounded hover:bg-gray-50">{a}</button>
+                        ))}
+                      </div>
                     </div>
                   ) : (
                     <div className="rounded-lg bg-gray-50 border border-gray-100 p-4 relative group">
+                      {/* Above-fold indicator */}
+                      {draft.primary_text.length > 210 && (
+                        <div className="absolute left-0 top-0 bottom-0 w-0.5 rounded-full">
+                          <div className="bg-emerald-400 rounded-full" style={{ height: `${Math.min(100, (210 / draft.primary_text.length) * 100)}%` }} />
+                          <div className="bg-gray-200 rounded-full flex-1" style={{ height: `${100 - Math.min(100, (210 / draft.primary_text.length) * 100)}%` }} />
+                        </div>
+                      )}
                       <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
                         {draft.primary_text}
                       </p>
-                      <button
-                        onClick={() => startEdit(draft)}
-                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 rounded-md bg-white border border-gray-200 p-1.5 text-gray-400 hover:text-indigo-600 shadow-sm"
-                        title="Edit draft"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                      </button>
+                      {/* Char count */}
+                      <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-100">
+                        <span className={`text-[10px] ${draft.primary_text.length > 3000 ? "text-rose-500" : "text-gray-400"}`}>{draft.primary_text.length} chars</span>
+                        <span className="text-[10px] text-gray-300">|</span>
+                        <span className={`text-[10px] ${draft.primary_text.length <= 210 ? "text-emerald-500" : "text-amber-500"}`}>
+                          {draft.primary_text.length <= 210 ? "All above fold" : `${210} above fold`}
+                        </span>
+                      </div>
+                      {/* Action buttons */}
+                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 flex gap-1">
+                        <button onClick={() => setPreviewId(draft.id)} title="LinkedIn preview"
+                          className="rounded-md bg-white border border-gray-200 p-1.5 text-gray-400 hover:text-indigo-600 shadow-sm">
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                        </button>
+                        <button onClick={() => startEdit(draft)} title="Edit draft"
+                          className="rounded-md bg-white border border-gray-200 p-1.5 text-gray-400 hover:text-indigo-600 shadow-sm">
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

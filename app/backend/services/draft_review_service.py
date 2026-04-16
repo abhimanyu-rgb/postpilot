@@ -55,6 +55,14 @@ def list_drafts(db: Session, status_filter: str | None = None) -> list[dict]:
             .first()
         )
 
+        # Check if feedback exists
+        from app.backend.models.post_feedback import PostFeedback
+        has_feedback = (
+            db.query(PostFeedback)
+            .filter(PostFeedback.draft_id == draft.id)
+            .first()
+        ) is not None
+
         result.append(
             {
                 "id": draft.id,
@@ -74,6 +82,7 @@ def list_drafts(db: Session, status_filter: str | None = None) -> list[dict]:
                 "selection_date": sel.selection_date if sel else "",
                 "published_at": str(published.published_at) if published else None,
                 "linkedin_post_ref": published.external_ref if published else None,
+                "has_feedback": has_feedback,
             }
         )
 

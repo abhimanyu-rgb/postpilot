@@ -57,6 +57,7 @@ def create_campaign(db: Session, data: CampaignCreate) -> Campaign:
         source_preferences_json=json.dumps(data.source_preferences_json),
         novelty_cooldown_days=data.novelty_cooldown_days,
         profile_adherence_override=data.profile_adherence_override,
+        custom_rss_feeds_json=json.dumps(data.custom_rss_feeds_json) if data.custom_rss_feeds_json else None,
     )
     db.add(campaign)
     db.commit()
@@ -77,6 +78,8 @@ def update_campaign(db: Session, campaign_id: int, data: CampaignUpdate) -> Camp
         elif field == "source_preferences_json" and value is not None:
             setattr(campaign, field, json.dumps(value))
         elif field == "duration_rule_json" and value is not None:
+            setattr(campaign, field, json.dumps(value))
+        elif field == "custom_rss_feeds_json" and value is not None:
             setattr(campaign, field, json.dumps(value))
         elif value is not None:
             setattr(campaign, field, value)

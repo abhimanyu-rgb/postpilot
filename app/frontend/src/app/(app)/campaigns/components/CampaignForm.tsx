@@ -14,6 +14,7 @@ export interface CampaignFormData {
   source_preferences_json: string[];
   novelty_cooldown_days: number;
   profile_adherence_override: string;
+  custom_rss_feeds_json: string[];
 }
 
 const SOURCE_OPTIONS = ["news", "rss", "reddit", "hackernews"];
@@ -38,6 +39,7 @@ export default function CampaignForm({ initial, onSubmit, submitLabel, loading }
   const [sources, setSources] = useState<string[]>(initial?.source_preferences_json || ["news"]);
   const [cooldown, setCooldown] = useState(initial?.novelty_cooldown_days ?? 3);
   const [adherence, setAdherence] = useState(initial?.profile_adherence_override || "");
+  const [customFeeds, setCustomFeeds] = useState(initial?.custom_rss_feeds_json?.join("\n") || "");
   const [error, setError] = useState<string | null>(null);
 
   function toggleSource(src: string) {
@@ -71,6 +73,7 @@ export default function CampaignForm({ initial, onSubmit, submitLabel, loading }
         source_preferences_json: sources,
         novelty_cooldown_days: cooldown,
         profile_adherence_override: adherence || "",
+        custom_rss_feeds_json: customFeeds.split("\n").map((f) => f.trim()).filter(Boolean),
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save campaign");
@@ -203,6 +206,21 @@ export default function CampaignForm({ initial, onSubmit, submitLabel, loading }
             </button>
           ))}
         </div>
+        {sources.includes("rss") && (
+          <div className="mt-3">
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Custom RSS Feeds
+              <span className="text-[10px] text-gray-400 font-normal ml-2">Optional. One URL per line. Added alongside default feeds.</span>
+            </label>
+            <textarea
+              value={customFeeds}
+              onChange={(e) => setCustomFeeds(e.target.value)}
+              rows={3}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-xs font-mono focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 resize-y"
+              placeholder={"https://example.com/feed.xml\nhttps://blog.example.com/rss"}
+            />
+          </div>
+        )}
       </Section>
 
       {/* Thresholds */}

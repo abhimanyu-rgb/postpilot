@@ -22,6 +22,7 @@ interface DraftItem {
   selection_date: string;
   published_at: string | null;
   linkedin_post_ref: string | null;
+  has_feedback: boolean;
 }
 
 interface Feedback {
@@ -67,6 +68,22 @@ const CAMPAIGN_COLORS = [
   { tag: "bg-purple-100 text-purple-700" },
 ];
 
+function fmtDate(dateStr: string | null): string {
+  if (!dateStr) return "";
+  try {
+    const d = new Date(dateStr.includes("T") ? dateStr : dateStr + "T00:00:00");
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  } catch { return dateStr; }
+}
+
+function fmtDateTime(dateStr: string | null): string {
+  if (!dateStr) return "";
+  try {
+    const d = new Date(dateStr.includes("T") ? dateStr : dateStr + "T00:00:00");
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  } catch { return dateStr; }
+}
+
 function getCampaignColor(id: number | null) {
   if (!id) return CAMPAIGN_COLORS[0];
   return CAMPAIGN_COLORS[(id - 1) % CAMPAIGN_COLORS.length];
@@ -90,6 +107,7 @@ export default function HistoryPage() {
   const [feedbackSaved, setFeedbackSaved] = useState<number | null>(null);
   const [lockedFeedback, setLockedFeedback] = useState<Record<number, Feedback>>({});
   const [showArchived, setShowArchived] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
 
   useEffect(() => {
     api.get<DraftItem[]>("/api/drafts/").then(setDrafts).catch(() => {}).finally(() => setLoading(false));
@@ -230,7 +248,16 @@ export default function HistoryPage() {
           <p className="text-sm text-gray-500 mt-1">{counts.published} published, {counts.approved + counts.queued} ready</p>
         </div>
         <div className="flex items-center gap-2">
-          {counts.archived > 0 && (
+          {/* View toggle */}
+          <div className="flex gap-0.5 bg-gray-100 rounded-lg p-0.5">
+            <button onClick={() => setViewMode("list")} className={`rounded-md px-2.5 py-1 text-[10px] font-medium ${viewMode === "list" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}>
+              List
+            </button>
+            <button onClick={() => setViewMode("calendar")} className={`rounded-md px-2.5 py-1 text-[10px] font-medium ${viewMode === "calendar" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}>
+              Calendar
+            </button>
+          </div>
+          {counts.archived > 0 && viewMode === "list" && (
             <button onClick={() => setShowArchived(!showArchived)}
               className={`text-xs px-3 py-1.5 rounded-lg border ${showArchived ? "border-violet-200 bg-violet-50 text-violet-700" : "border-gray-200 text-gray-400 hover:text-gray-600"}`}>
               {showArchived ? `Hide archived (${counts.archived})` : `Show archived (${counts.archived})`}
@@ -257,7 +284,71 @@ export default function HistoryPage() {
         </div>
       )}
 
-      {/* Filter tabs */}
+      {/* Calendar view */}
+      {viewMode === "calendar" && (
+        <div className="rounded-xl border border-indigo-100/50 bg-white shadow-sm p-4 mb-6">
+          {(() => {
+            const publishedPosts = drafts.filter((d) => d.status === "published" && d.published_at);
+            const byDay: Record<string, DraftItem[]> = {};
+            publishedPosts.forEach((d) => {
+              const day = fmtDate(d.published_at);
+              if (!byDay[day]) byDay[day] = [];
+              byDay[day].push(d);
+            });
+
+            // Build a 5-week calendar grid
+            const now = new Date();
+            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+            const startOffset = firstDay.getDay();
+            const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+            const weeks: (number | null)[][] = [];
+            let week: (number | null)[] = Array(startOffset).fill(null);
+            for (let d = 1; d <= daysInMonth; d++) {
+              week.push(d);
+              if (week.length === 7) { weeks.push(week); week = []; }
+            }
+            if (week.length > 0) { while (week.length < 7) week.push(null); weeks.push(week); }
+
+            const monthLabel = now.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+            return (
+              <div>
+                <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-3">{monthLabel}</p>
+                <div className="grid grid-cols-7 gap-px">
+                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+                    <div key={d} className="text-center text-[9px] text-gray-400 font-medium py-1">{d}</div>
+                  ))}
+                  {weeks.flat().map((day, i) => {
+                    if (day === null) return <div key={i} className="h-16 bg-gray-50/50 rounded" />;
+                    const dateStr = new Date(now.getFullYear(), now.getMonth(), day).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                    const posts = byDay[dateStr] || [];
+                    const isToday = day === now.getDate();
+                    const color = getCampaignColor(posts[0]?.campaign_id ?? null);
+
+                    return (
+                      <div key={i} className={`h-16 rounded border p-1 ${isToday ? "border-violet-300 bg-violet-50/30" : "border-gray-100"} ${posts.length > 0 ? "bg-white" : "bg-gray-50/30"}`}>
+                        <p className={`text-[10px] ${isToday ? "font-bold text-violet-700" : "text-gray-500"}`}>{day}</p>
+                        {posts.slice(0, 2).map((p) => {
+                          const c = getCampaignColor(p.campaign_id);
+                          return (
+                            <div key={p.id} className={`mt-0.5 rounded px-1 py-0.5 text-[8px] truncate ${c.tag}`} title={p.headline}>
+                              {p.headline.slice(0, 20)}
+                            </div>
+                          );
+                        })}
+                        {posts.length > 2 && <p className="text-[8px] text-gray-400 mt-0.5">+{posts.length - 2} more</p>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* List view */}
+      {viewMode === "list" && <>
       <div className="flex gap-1 mb-6 bg-gray-100 rounded-lg p-1 w-fit">
         {(["all", "published", "queued", "approved", "pending_review", "rejected"] as ViewMode[]).map((f) => (
           <button key={f} onClick={() => setView(f)}
@@ -305,8 +396,20 @@ export default function HistoryPage() {
                     <h2 className="text-xs font-semibold text-gray-600 uppercase tracking-wider">{month}</h2>
                   </div>
                   <div className="flex items-center gap-3">
+                    {/* Feedback summary for the month */}
+                    {(() => {
+                      const feedbackable = items.filter((d) => d.status === "published" || d.status === "rejected");
+                      const withFb = feedbackable.filter((d) => d.has_feedback).length;
+                      const total = feedbackable.length;
+                      if (total === 0) return null;
+                      return (
+                        <span className={`text-[9px] font-medium ${withFb === total ? "text-emerald-600" : "text-amber-500"}`}>
+                          {withFb}/{total} FB
+                        </span>
+                      );
+                    })()}
                     <span className="text-[10px] text-gray-400">{items.length} post{items.length > 1 ? "s" : ""}</span>
-                    {/* Mini status summary */}
+                    {/* Mini status dots */}
                     <div className="flex gap-1">
                       {items.filter((d) => d.status === "published").length > 0 && (
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" title="Published" />
@@ -356,14 +459,28 @@ export default function HistoryPage() {
                               <div className="flex items-center gap-2">
                                 <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${color.tag}`}>{draft.campaign_name}</span>
                                 <span className="text-[11px] text-gray-400">
-                                  {draft.published_at ? new Date(draft.published_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : draft.selection_date}
+                                  {fmtDate(draft.published_at || draft.selection_date || draft.created_at)}
                                 </span>
                               </div>
                               <p className="text-sm font-medium text-gray-900 truncate mt-0.5">{draft.headline}</p>
                             </div>
 
-                            {/* Right — actions + badge */}
+                            {/* Right — feedback indicator + actions + badge */}
                             <div className="flex items-center gap-1.5 shrink-0">
+                              {/* Feedback indicator */}
+                              {(draft.status === "published" || draft.status === "rejected") && (
+                                draft.has_feedback ? (
+                                  <span className="flex items-center gap-0.5 text-[9px] text-emerald-600 font-medium" title="Feedback submitted">
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                                    FB
+                                  </span>
+                                ) : (
+                                  <span className="flex items-center gap-0.5 text-[9px] text-amber-500 font-medium" title="Feedback pending">
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" /></svg>
+                                    FB
+                                  </span>
+                                )
+                              )}
                               {draft.linkedin_post_ref && (
                                 <a href={`https://www.linkedin.com/feed/update/${draft.linkedin_post_ref}`} target="_blank" rel="noopener noreferrer"
                                   className="text-[10px] text-emerald-600 hover:text-emerald-700 font-medium">View</a>
@@ -406,7 +523,7 @@ export default function HistoryPage() {
                                 <span className="capitalize">{draft.narrative_type.replace("_", " ")}</span>
                                 <span>v{draft.version}</span>
                                 <span>Confidence: {(draft.confidence_score * 100).toFixed(0)}%</span>
-                                {draft.published_at && <span>Published: {new Date(draft.published_at).toLocaleString()}</span>}
+                                {draft.published_at && <span>Published: {fmtDateTime(draft.published_at)}</span>}
                               </div>
 
                               {publishResult?.id === draft.id && (
@@ -427,7 +544,7 @@ export default function HistoryPage() {
                                   className="rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-medium text-gray-500 hover:bg-gray-50">
                                   {copiedId === draft.id ? "Copied!" : "Copy"}
                                 </button>
-                                {(draft.status === "published" || draft.status === "approved") && !isArchived && (
+                                {(draft.status === "published" || draft.status === "rejected") && !isArchived && (
                                   <button onClick={() => openFeedback(draft)}
                                     className="rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-medium text-gray-500 hover:bg-gray-50">
                                     {lockedFeedback[draft.id] ? "Feedback" : feedbackSaved === draft.id ? "Saved!" : "Add Feedback"}
@@ -502,6 +619,7 @@ export default function HistoryPage() {
           })}
         </div>
       )}
+      </>}
     </div>
   );
 }

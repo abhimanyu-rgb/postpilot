@@ -12,7 +12,7 @@ from app.backend.services.sources.rss_provider import RSSProvider
 logger = logging.getLogger("orchestrator")
 
 
-def get_providers(source_preferences: list[str]) -> list[SourceProvider]:
+def get_providers(source_preferences: list[str], custom_rss_feeds: list[str] | None = None) -> list[SourceProvider]:
     """Return instantiated providers matching the campaign's source preferences.
 
     Provider mapping:
@@ -33,7 +33,10 @@ def get_providers(source_preferences: list[str]) -> list[SourceProvider]:
                 providers.append(RSSProvider())
 
         elif pref == "rss":
-            providers.append(RSSProvider())
+            if custom_rss_feeds:
+                providers.append(RSSProvider(feed_urls=custom_rss_feeds))
+            else:
+                providers.append(RSSProvider())
 
         elif pref == "reddit":
             providers.append(RedditProvider())

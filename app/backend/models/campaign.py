@@ -21,5 +21,6 @@ class Campaign(Base, IdMixin, FullTimestampMixin):
     source_preferences_json: Mapped[str] = mapped_column(Text, nullable=False)
     novelty_cooldown_days: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
     profile_adherence_override: Mapped[str | None] = mapped_column(Text, nullable=True)
+    custom_rss_feeds_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (Index("idx_campaign_status", "status"),)

@@ -49,6 +49,46 @@ def reject_draft(
     return draft_review_service.reject_draft(db, draft_id, reason)
 
 
+@router.get("/{draft_id}/duplicate-check")
+def check_duplicate(
+    draft_id: int,
+    db: Session = Depends(get_db),
+):
+    """Check if a draft's topic overlaps with recent published posts."""
+    from datetime import datetime, timedelta, timezone
+    draft = db.query(draft_review_service.Draft).filter(draft_review_service.Draft.id == draft_id).first()
+    if not draft:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=14)
+    recent = (
+        db.query(draft_review_service.PublishedPost)
+        .filter(draft_review_service.PublishedPost.published_at >= cutoff)
+        .all()
+    )
+
+    if not recent:
+        return {"has_overlap": False}
+
+    draft_words = set(draft.primary_text.lower().split())
+    for pub in recent:
+        pub_draft = db.query(draft_review_service.Draft).filter(draft_review_service.Draft.id == pub.draft_id).first()
+        if not pub_draft:
+            continue
+        pub_words = set(pub_draft.primary_text.lower().split())
+        overlap = len(draft_words & pub_words) / max(len(draft_words | pub_words), 1)
+        if overlap > 0.3:
+            return {
+                "has_overlap": True,
+                "similarity": round(overlap * 100),
+                "similar_headline": pub_draft.primary_text[:80] + "...",
+                "published_date": str(pub.published_at)[:10] if pub.published_at else "",
+            }
+
+    return {"has_overlap": False}
+
+
 @router.get("/{draft_id}/drift-check")
 def check_draft_drift(
     draft_id: int,

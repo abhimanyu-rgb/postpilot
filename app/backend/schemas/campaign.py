@@ -16,6 +16,7 @@ class CampaignCreate(BaseModel):
     source_preferences_json: list[str] = Field(min_length=1)
     novelty_cooldown_days: int = Field(ge=1, le=30, default=3)
     profile_adherence_override: str | None = None
+    custom_rss_feeds_json: list[str] | None = None
 
 
 class CampaignUpdate(BaseModel):
@@ -31,6 +32,7 @@ class CampaignUpdate(BaseModel):
     source_preferences_json: list[str] | None = Field(default=None, min_length=1)
     novelty_cooldown_days: int | None = Field(default=None, ge=1, le=30)
     profile_adherence_override: str | None = None
+    custom_rss_feeds_json: list[str] | None = None
 
 
 class CampaignResponse(BaseModel):
@@ -48,6 +50,7 @@ class CampaignResponse(BaseModel):
     source_preferences_json: str
     novelty_cooldown_days: int
     profile_adherence_override: str | None
+    custom_rss_feeds_json: str | None
     created_at: datetime
     updated_at: datetime
 

@@ -28,7 +28,13 @@ def fetch_sources(
     """
     topics = json.loads(campaign.topics_json)
     source_prefs = json.loads(campaign.source_preferences_json)
-    providers = get_providers(source_prefs)
+    custom_rss: list[str] | None = None
+    if hasattr(campaign, "custom_rss_feeds_json") and campaign.custom_rss_feeds_json:
+        try:
+            custom_rss = json.loads(campaign.custom_rss_feeds_json)
+        except (json.JSONDecodeError, TypeError):
+            pass
+    providers = get_providers(source_prefs, custom_rss_feeds=custom_rss)
 
     if not providers:
         run_logger.warning("No source providers available for preferences: %s", source_prefs)
