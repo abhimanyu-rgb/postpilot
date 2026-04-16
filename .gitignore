@@ -7,17 +7,13 @@ build/
 .venv/
 venv/
 
-# Environment
+# Environment & personal data
 .env
+.env.local
+personality-profile.md
 
 # Data (local runtime data, not committed)
-data/app.db
-data/sources/
-data/historical/
-data/drafts/
-data/logs/
-data/exports/
-data/backups/
+data/
 
 # Node / Next.js
 app/frontend/node_modules/
@@ -30,3 +26,9 @@ app/frontend/out/
 *.swp
 *.swo
 .DS_Store
+
+# Build artifacts
+*.egg-info/
+
+# Claude Code config (personal)
+.claude/

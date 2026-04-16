@@ -1,7 +1,7 @@
 [project]
-name = "linkedin-content-orchestrator"
-version = "0.1.0"
-description = "Local-first LinkedIn content orchestration app"
+name = "postpilot"
+version = "1.0.0"
+description = "AI-powered LinkedIn content engine. Source trends, generate drafts, publish on autopilot."
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115.0",
@@ -14,6 +14,9 @@ dependencies = [
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
     "anthropic>=0.40.0",
+    "psycopg2-binary>=2.9.0",
+    "trafilatura>=2.0.0",
+    "scikit-learn>=1.5.0",
 ]
 
 [project.optional-dependencies]
@@ -22,6 +25,13 @@ dev = [
     "pytest-asyncio>=0.24.0",
     "ruff>=0.8.0",
 ]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
 
 [tool.ruff]
 target-version = "py311"

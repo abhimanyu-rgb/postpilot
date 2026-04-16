@@ -3,9 +3,16 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+from app.backend.core.config import settings
 from app.backend.core.database import Base
+import app.backend.models  # noqa: F401 — register all models for autogenerate
 
 config = context.config
+
+# Override sqlalchemy.url from .env settings (not hardcoded alembic.ini)
+# Escape % for configparser interpolation
+config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
+
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 

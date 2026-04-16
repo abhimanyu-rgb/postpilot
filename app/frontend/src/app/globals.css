@@ -1,8 +1,18 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #faf8ff;
+  --foreground: #1e1b4b;
+  --surface: #ffffff;
+  --primary: #6366f1;
+  --primary-hover: #4f46e5;
+  --primary-light: #eef2ff;
+  --border: #e0e0ef;
+  --border-hover: #c7c7e0;
+  --muted: #9ca3af;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
 }
 
 @theme inline {
@@ -12,15 +22,212 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+}
+
+/* Smooth transitions globally (excludes animated elements) */
+*, *::before, *::after {
+  transition-property: color, background-color, border-color, box-shadow;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+/* Better focus styles */
+*:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Spinner animation */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Pulse animation for active step */
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.4); }
+  70% { box-shadow: 0 0 0 8px rgba(79, 70, 229, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(79, 70, 229, 0); }
+}
+.animate-pulse-ring {
+  animation: pulse-ring 2s ease-in-out infinite;
+}
+
+/* Fade in */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+/* Scale in for success */
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+.animate-scale-in {
+  animation: scaleIn 0.3s ease-out forwards;
+}
+
+/* Splash screen: smooth superman flight path */
+@keyframes logoFlight {
+  0% {
+    opacity: 0;
+    transform: translate(-60vw, 45vh) scale(0.15) rotate(-35deg);
+    filter: blur(2px);
+  }
+  8% {
+    opacity: 1;
+    filter: blur(0px);
+  }
+  25% {
+    transform: translate(-15vw, -20vh) scale(0.55) rotate(-12deg);
+  }
+  45% {
+    transform: translate(25vw, -35vh) scale(0.7) rotate(8deg);
+  }
+  60% {
+    transform: translate(5vw, 5vh) scale(0.8) rotate(-3deg);
+  }
+  78% {
+    transform: translate(-3vw, -2vh) scale(0.95) rotate(1deg);
+  }
+  92% {
+    transform: translate(0.5vw, 0.5vh) scale(1.02) rotate(0deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1) rotate(0deg);
+    filter: blur(0px);
+  }
+}
+.animate-logo-flight {
+  opacity: 0;
+  animation: logoFlight 3s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+}
+
+/* Trail ghosts: same path, delayed, fading */
+.animate-trail-1 {
+  opacity: 0;
+  animation: logoFlight 3s cubic-bezier(0.22, 0.61, 0.36, 1) forwards, trailFade 3s ease-out forwards;
+  animation-delay: 0s;
+}
+.animate-trail-2 {
+  opacity: 0;
+  animation: logoFlight 3s cubic-bezier(0.22, 0.61, 0.36, 1) forwards, trailFade 3s ease-out forwards;
+  animation-delay: 0.08s;
+}
+.animate-trail-3 {
+  opacity: 0;
+  animation: logoFlight 3s cubic-bezier(0.22, 0.61, 0.36, 1) forwards, trailFade 3s ease-out forwards;
+  animation-delay: 0.16s;
+}
+.animate-trail-4 {
+  opacity: 0;
+  animation: logoFlight 3s cubic-bezier(0.22, 0.61, 0.36, 1) forwards, trailFade 3s ease-out forwards;
+  animation-delay: 0.24s;
+}
+.animate-trail-5 {
+  opacity: 0;
+  animation: logoFlight 3s cubic-bezier(0.22, 0.61, 0.36, 1) forwards, trailFade 3s ease-out forwards;
+  animation-delay: 0.32s;
+}
+
+/* Trail ghosts fade out before landing */
+@keyframes trailFade {
+  0% { opacity: 0; }
+  10% { opacity: 0.5; }
+  50% { opacity: 0.3; }
+  75% { opacity: 0.1; }
+  100% { opacity: 0; }
+}
+
+/* Landing glow pulse */
+@keyframes landingGlow {
+  0% { opacity: 0; transform: scale(0.5); }
+  50% { opacity: 0.3; transform: scale(1.2); }
+  100% { opacity: 0.1; transform: scale(1); }
+}
+.animate-landing-glow {
+  opacity: 0;
+  animation: landingGlow 0.8s ease-out forwards;
+  animation-delay: 2.8s;
+}
+
+/* Splash: title reveal after logo lands */
+@keyframes titleReveal {
+  0% { opacity: 0; transform: translateY(20px); letter-spacing: 0.3em; }
+  100% { opacity: 1; transform: translateY(0); letter-spacing: 0.02em; }
+}
+.animate-title-reveal {
+  opacity: 0;
+  animation: titleReveal 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 2.8s;
+}
+
+/* Splash: tagline fade */
+@keyframes taglineFade {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-tagline {
+  opacity: 0;
+  animation: taglineFade 0.6s ease-out forwards;
+  animation-delay: 3.4s;
+}
+
+/* Splash: button rise */
+@keyframes buttonRise {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-button-rise {
+  opacity: 0;
+  animation: buttonRise 0.5s ease-out forwards;
+  animation-delay: 3.8s;
+}
+
+/* Splash: trail particles behind logo */
+@keyframes trailDot {
+  0% { opacity: 0.8; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0); }
+}
+.animate-trail {
+  animation: trailDot 0.6s ease-out forwards;
+}
+
+/* Splash: background gradient shift */
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.animate-gradient {
+  background-size: 200% 200%;
+  animation: gradientShift 8s ease infinite;
 }
