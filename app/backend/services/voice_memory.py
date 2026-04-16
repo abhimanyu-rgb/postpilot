@@ -64,7 +64,7 @@ def update_voice_snapshot(db: Session) -> None:
         posts_block = "\n---\n".join(post_texts)
 
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-haiku-4-5-20251001",
             max_tokens=500,
             messages=[{
                 "role": "user",
@@ -112,7 +112,7 @@ def check_drift(db: Session, draft_text: str) -> dict | None:
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-haiku-4-5-20251001",
             max_tokens=300,
             messages=[{
                 "role": "user",
@@ -202,7 +202,7 @@ def analyze_personality_evolution(db: Session) -> dict | None:
         current_profile = config.personality_prompt or ""
 
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-haiku-4-5-20251001",
             max_tokens=500,
             messages=[{
                 "role": "user",

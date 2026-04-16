@@ -147,7 +147,7 @@ def generate_drafts(
 
             response = client.messages.create(
                 model="claude-sonnet-4-20250514",
-                max_tokens=2048,
+                max_tokens=1600,
                 system=[
                     {
                         "type": "text",

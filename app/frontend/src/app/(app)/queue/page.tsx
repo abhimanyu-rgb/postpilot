@@ -261,9 +261,9 @@ export default function QueuePage() {
   }
 
   return (
-    <div className="p-8 max-w-4xl">
+    <div className="p-6 max-w-[900px]">
       <div className="flex items-center gap-3 mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Review Queue</h1>
+        <h1 className="text-xl font-semibold text-gray-900">Review Queue</h1>
         {drafts.length > 0 && (
           <span className="rounded-full bg-indigo-100 text-indigo-700 px-2.5 py-0.5 text-xs font-semibold">
             {drafts.length}
@@ -293,9 +293,9 @@ export default function QueuePage() {
             try { hooks = JSON.parse(draft.alternate_hooks_json || "[]"); } catch { /* empty */ }
 
             return (
-              <div key={draft.id} className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden animate-fade-in">
+              <div key={draft.id} className="rounded-xl border border-indigo-100/50 bg-white shadow-sm overflow-hidden animate-fade-in">
                 {/* Header */}
-                <div className="px-5 py-4 flex items-start justify-between gap-4">
+                <div className="px-4 py-3 flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-xs font-medium text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
@@ -383,7 +383,7 @@ export default function QueuePage() {
                 )}
 
                 {/* Draft text — editable or read-only */}
-                <div className="px-5 pb-3">
+                <div className="px-4 pb-2.5">
                   {isEditing ? (
                     <div className="space-y-2">
                       <textarea
@@ -510,7 +510,7 @@ export default function QueuePage() {
                 </div>
 
                 {/* Alternate ideas section */}
-                <div className="px-5 pb-3">
+                <div className="px-4 pb-2.5">
                   <button
                     onClick={() => loadAlternates(draft.id)}
                     className="text-xs text-indigo-500 hover:text-indigo-700 flex items-center gap-1 font-medium"
@@ -555,7 +555,7 @@ export default function QueuePage() {
                 </div>
 
                 {/* Media suggestions */}
-                <div className="px-5 pb-3">
+                <div className="px-4 pb-2.5">
                   <button
                     onClick={() => loadMedia(draft.id)}
                     disabled={mediaLoading && mediaForId === draft.id}
@@ -657,7 +657,7 @@ export default function QueuePage() {
                 </div>
 
                 {/* Action bar */}
-                <div className="px-5 py-3 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between">
+                <div className="px-4 py-2.5 bg-violet-50/20 border-t border-indigo-50 flex items-center justify-between">
                   <div className="flex gap-2">
                     {!isEditing && (
                       <button

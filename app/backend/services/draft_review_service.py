@@ -271,7 +271,7 @@ Polish this post now."""
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     response = client.messages.create(
         model="claude-sonnet-4-20250514",
-        max_tokens=2048,
+        max_tokens=1600,
         system=[{
             "type": "text",
             "text": system_prompt,
@@ -414,7 +414,7 @@ Write the LinkedIn post now."""
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     response = client.messages.create(
         model="claude-sonnet-4-20250514",
-        max_tokens=2048,
+        max_tokens=1600,
         system=[{
             "type": "text",
             "text": system_prompt,

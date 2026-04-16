@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -54,11 +55,18 @@ const NAV_ITEMS = [
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
     <div className="flex min-h-screen bg-[#faf8ff]">
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 bg-black/30 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+
       {/* Sidebar */}
-      <aside className="w-60 shrink-0 border-r border-indigo-100/60 bg-white flex flex-col">
+      <aside className={`fixed md:static z-50 md:z-auto w-60 shrink-0 border-r border-indigo-100/60 bg-white flex flex-col h-full md:h-auto ${sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}
+        style={{ transition: "transform 200ms ease" }}>
         {/* Logo */}
         <div className="px-5 py-5 border-b border-indigo-50">
           <div className="flex items-center gap-2.5">
@@ -82,6 +90,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={() => setSidebarOpen(false)}
                 className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] ${
                   active
                     ? "bg-gradient-to-r from-indigo-50 to-violet-50 text-indigo-700 font-medium"
@@ -120,7 +129,25 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main */}
-      <main className="flex-1 overflow-auto">{children}</main>
+      <main className="flex-1 overflow-auto">
+        {/* Mobile header */}
+        <div className="md:hidden flex items-center gap-3 px-4 py-3 border-b border-indigo-50 bg-white sticky top-0 z-30">
+          <button onClick={() => setSidebarOpen(true)} className="p-1 rounded-lg hover:bg-gray-100">
+            <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-md bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
+              <svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 2L11 13" /><path d="M22 2L15 22L11 13L2 9L22 2Z" />
+              </svg>
+            </div>
+            <span className="text-sm font-bold text-gray-900">PostPilot</span>
+          </div>
+        </div>
+        {children}
+      </main>
     </div>
   );
 }
