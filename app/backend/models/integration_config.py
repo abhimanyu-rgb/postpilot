@@ -23,3 +23,10 @@ class IntegrationConfig(Base, IdMixin, FullTimestampMixin):
     author_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     personality_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     content_guardrails: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Voice memory: rolling summary of published positions (updated after each publish)
+    voice_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
+    voice_snapshot_post_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # Personality evolution: suggested updates from feedback patterns
+    personality_evolution_log: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -23,28 +23,54 @@ PostPilot is a local-first LinkedIn content automation tool. It scrapes trending
 ## How It Works
 
 ```
-1. Source Fetching      RSS, Reddit, Hacker News --> 3500+ signals daily
-2. TF-IDF Ranking       Filters to top 50 most relevant signals
-3. Content Extraction   Trafilatura pulls full article text
-4. AI Scoring           Claude scores opportunities by relevance + novelty
-5. Draft Generation     Claude writes LinkedIn posts in your voice
-6. Human Review         Edit, polish with AI, approve or reject
-7. Scheduled Publish    Posts at your campaign's configured time slots
-8. Feedback Loop        Your ratings improve future content
+1. Source Fetching       RSS, Reddit, Hacker News --> 3500+ signals daily
+2. TF-IDF Ranking        Filters to top 50 most relevant signals
+3. Content Extraction    Trafilatura pulls full article text from URLs
+4. AI Scoring            Claude scores opportunities (relevance + novelty)
+5. Draft Generation      Claude writes LinkedIn posts in your voice
+6. Voice Drift Check     Compares draft against your recent published positions
+7. Human Review          Edit, polish with AI, approve or reject
+8. Scheduled Publish     Posts within campaign time windows (FIFO queue)
+9. Feedback Loop         Your ratings improve future content
+10. Personality Evolution Feedback patterns update your voice profile over time
 ```
 
 ## Features
 
-- **Multi-campaign support** with independent topics, personas, and posting schedules
-- **Personality profile system** that learns your writing voice and enforces it
-- **Content guardrails** to prevent AI-sounding patterns (no em dashes, no hype language)
-- **Review queue** with inline editing, AI polish, and alternate post ideas
-- **Media suggestions** sourced from original articles (OG images + links)
-- **Token usage tracking** with weekly/monthly cost estimates
-- **Publish queue** with FIFO ordering, campaign time windows, and global daily limits
-- **Post feedback loop** that feeds performance data back into future content generation
-- **LinkedIn OAuth** for secure publishing
-- **Settings page** for self-serve configuration (no code changes needed)
+### Content Pipeline
+- **Multi-campaign support** with independent topics, personas, posting schedules, and thresholds
+- **32 RSS feeds** across tech, AI, business, academic, and industry sources
+- **Reddit and Hacker News** providers with smart topic-to-subreddit mapping
+- **TF-IDF pre-ranking** reduces 3500+ signals to the top 50 before LLM scoring
+- **Trafilatura content extraction** enriches signals with full article text
+
+### AI Intelligence
+- **Claude-powered scoring** identifies 3-8 content opportunities per run
+- **Claude-powered drafting** generates LinkedIn posts matching your voice
+- **AI polish** rewrites drafts on demand with optional instructions
+- **Content guardrails** prevent AI-sounding patterns (no em dashes, no hype language)
+- **Prompt caching** reduces token costs on repeated system prompts
+
+### Voice & Personality
+- **Personality profile system** with editable voice, structure, and guardrail configs
+- **Voice snapshot** maintains a rolling summary of your published positions
+- **Drift detection** flags when a new draft contradicts recent public positions
+- **Personality evolution** analyzes feedback patterns every 10 posts and suggests profile updates
+- **Priority system**: guardrails > source content > feedback learnings > personality profile
+
+### Review & Publishing
+- **Review queue** with inline editing, AI polish, alternate post ideas, and media suggestions
+- **Media sourcing** extracts OG images and article links from original sources
+- **Scheduled publish queue** respects campaign time windows, min gap, and global daily limits
+- **Post feedback** (immutable once submitted) feeds back into future content generation
+- **Revert to review** if you approve or reject too quickly
+
+### Dashboard & Management
+- **Dashboard** with stats, publish queue status, recent runs, and token usage tracking
+- **History page** with monthly grouping, collapsible months, multi-select, archive, and delete
+- **Campaign management** with create, edit, activate, pause, archive, and delete
+- **Settings page** with self-serve setup for LinkedIn OAuth, API keys, personality profile, and preferences
+- **Animated splash screen** with Pixar-style logo flight and sound design
 
 ## Quick Start
 
@@ -58,7 +84,7 @@ PostPilot is a local-first LinkedIn content automation tool. It scrapes trending
 ### 1. Clone and configure
 
 ```bash
-git clone https://github.com/your-username/postpilot.git
+git clone https://github.com/abhimanyu-rgb/postpilot.git
 cd postpilot
 
 cp .env.example .env
@@ -110,12 +136,11 @@ Open **http://localhost:3000** in your browser.
 
 ### 6. First-time setup
 
-1. Go to the setup page, click **Validate Connections**
-2. Configure your timezone and posting preferences
-3. Go to **Settings > Writing Personality** and customize your voice profile
-4. Create a campaign with your topics and persona
-5. Trigger a run from the campaign detail page
-6. Review drafts in the **Review Queue**
+1. Click **Get Started** on the splash screen
+2. Validate your API key connection on the setup page
+3. Configure timezone and posting preferences
+4. Go to **Settings > Writing Personality** and customize your voice profile
+5. Create a campaign, trigger a run, and review your first draft
 
 ## LinkedIn Publishing (Optional)
 
@@ -140,26 +165,26 @@ postpilot/
     backend/
       api/              # FastAPI route handlers
       core/             # Config, database, scheduler, storage
-      models/           # SQLAlchemy data models
+      models/           # SQLAlchemy data models (17 tables)
       schemas/          # Pydantic request/response schemas
       services/         # Business logic
         sources/        # Content source providers (RSS, Reddit, HN)
     frontend/
       src/
         app/            # Next.js pages and layouts
-          (app)/        # Authenticated app pages
+          (app)/        # Authenticated app (dashboard, campaigns, queue, history, settings)
           setup/        # First-time setup wizard
         components/     # Reusable UI components
         hooks/          # React hooks
         lib/            # API client utilities
   migrations/           # Alembic database migrations
-  scripts/              # CLI utilities
+  scripts/              # CLI utilities (set_secret.py)
 ```
 
 ## Content Sources (Free, No API Keys)
 
-| Source | Feeds | What it provides |
-|--------|-------|-----------------|
+| Source | Coverage | What it provides |
+|--------|----------|-----------------|
 | **RSS** | 32 feeds | TechCrunch, Wired, MIT Tech Review, Nature, HBR, arXiv, Stanford HAI, McKinsey, Stratechery, and more |
 | **Reddit** | 16 topic categories | r/MachineLearning, r/startups, r/technology, r/datascience, and more |
 | **Hacker News** | Top + Best stories | High-signal tech and startup content |
@@ -171,8 +196,20 @@ PostPilot minimizes Claude API costs through:
 - **TF-IDF pre-ranking**: filters 3500+ signals to the top 50 before LLM scoring
 - **Trafilatura extraction**: sends rich article content instead of thin summaries
 - **Prompt caching**: system prompts are cached across calls
-- **Token-budgeted feedback**: past post learnings are capped at ~800 tokens
+- **Token-budgeted feedback**: past post learnings capped at ~800 tokens
 - **Dashboard tracking**: monitor weekly/monthly token usage and estimated costs
+
+## Voice Memory System
+
+PostPilot maintains two layers of memory to keep your content coherent:
+
+### Short-term: Voice Snapshot
+After each publish, your last 30 days of posts are summarized into a compact snapshot of your public positions. New drafts are checked against this snapshot, and contradictions are flagged with severity badges (low/medium/high) in the review queue.
+
+### Long-term: Personality Evolution
+Every 10 feedbacks, patterns are analyzed and profile update suggestions are generated. This ensures your voice profile evolves naturally as your thinking evolves, without drifting from your core identity.
+
+**Rule:** The adaptive layer may tune hook styles, structure preferences, and topic angles. But it never overwrites your core archetype, tone baseline, or identity guardrails.
 
 ## Tech Stack
 
@@ -182,13 +219,13 @@ PostPilot minimizes Claude API costs through:
 | Frontend | Next.js 16, React 19, Tailwind CSS |
 | Database | SQLite (local) or PostgreSQL (Supabase) |
 | LLM | Anthropic Claude Sonnet |
-| Scheduling | APScheduler |
+| Scheduling | APScheduler (content gen + publish queue) |
 | Content Extraction | trafilatura, scikit-learn |
 | Auth | LinkedIn OAuth 2.0 |
 
 ## Configuration
 
-All configuration is done through the `.env` file and the Settings page in the app.
+All configuration is through `.env` and the in-app Settings page.
 
 | Variable | Required | Description |
 |----------|----------|-------------|

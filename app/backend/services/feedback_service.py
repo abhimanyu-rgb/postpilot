@@ -54,6 +54,15 @@ def save_feedback(
     db.commit()
     db.refresh(feedback)
     logger.info("Feedback saved for draft %d", draft_id)
+
+    # Trigger personality evolution analysis every 10 feedbacks
+    total_feedbacks = db.query(PostFeedback).count()
+    if total_feedbacks > 0 and total_feedbacks % 10 == 0:
+        try:
+            from app.backend.services.voice_memory import analyze_personality_evolution
+            analyze_personality_evolution(db)
+        except Exception as e:
+            logger.debug("Personality evolution analysis failed: %s", e)
     return feedback
 
 

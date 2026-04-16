@@ -49,6 +49,77 @@ def reject_draft(
     return draft_review_service.reject_draft(db, draft_id, reason)
 
 
+@router.get("/{draft_id}/drift-check")
+def check_draft_drift(
+    draft_id: int,
+    db: Session = Depends(get_db),
+):
+    """Check if a draft contradicts recent published positions."""
+    draft = db.query(draft_review_service.Draft).filter(
+        draft_review_service.Draft.id == draft_id
+    ).first()
+    if not draft:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Draft not found")
+    from app.backend.services.voice_memory import check_drift
+    result = check_drift(db, draft.primary_text)
+    return result or {"has_drift": False}
+
+
+@router.post("/{draft_id}/revert")
+def revert_to_review(
+    draft_id: int,
+    db: Session = Depends(get_db),
+):
+    """Revert a draft back to pending_review status."""
+    draft = db.query(draft_review_service.Draft).filter(
+        draft_review_service.Draft.id == draft_id
+    ).first()
+    if not draft:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Draft not found")
+    if draft.status == "published":
+        from fastapi import HTTPException
+        raise HTTPException(status_code=409, detail="Cannot revert a published post")
+    draft.status = "pending_review"
+    db.commit()
+    return {"id": draft.id, "status": "pending_review"}
+
+
+@router.post("/{draft_id}/archive")
+def archive_draft(
+    draft_id: int,
+    db: Session = Depends(get_db),
+):
+    """Archive a draft to hide from history."""
+    draft = db.query(draft_review_service.Draft).filter(
+        draft_review_service.Draft.id == draft_id
+    ).first()
+    if not draft:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Draft not found")
+    draft.status = "archived"
+    db.commit()
+    return {"id": draft.id, "status": "archived"}
+
+
+@router.delete("/{draft_id}")
+def delete_draft(
+    draft_id: int,
+    db: Session = Depends(get_db),
+):
+    """Permanently delete a draft."""
+    draft = db.query(draft_review_service.Draft).filter(
+        draft_review_service.Draft.id == draft_id
+    ).first()
+    if not draft:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Draft not found")
+    db.delete(draft)
+    db.commit()
+    return None
+
+
 @router.put("/{draft_id}/text")
 def update_draft_text(
     draft_id: int,

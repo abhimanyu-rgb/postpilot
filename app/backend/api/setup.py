@@ -84,6 +84,13 @@ def get_token_usage(db: Session = Depends(get_db)):
     return get_usage_stats(db)
 
 
+@router.get("/personality/evolution")
+def get_personality_evolution(db: Session = Depends(get_db)):
+    """Get personality evolution log from feedback analysis."""
+    from app.backend.services.voice_memory import get_evolution_log
+    return get_evolution_log(db)
+
+
 @router.get("/env-config")
 def get_env_config():
     """Return which .env keys are configured (masked values, never raw secrets).

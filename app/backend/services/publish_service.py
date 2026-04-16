@@ -155,6 +155,13 @@ def execute_publish(db: Session, draft_id: int) -> dict:
             db.add(published)
             db.commit()
 
+            # Update voice snapshot with new published position
+            try:
+                from app.backend.services.voice_memory import update_voice_snapshot
+                update_voice_snapshot(db)
+            except Exception as e:
+                logger.debug("Voice snapshot update after publish failed: %s", e)
+
             logger.info("Draft %d published to LinkedIn (post_id=%s)", draft_id, post_id)
             return {
                 "id": draft.id,

@@ -62,6 +62,9 @@ export default function QueuePage() {
   // Approval schedule state
   const [approvalInfo, setApprovalInfo] = useState<{ id: number; message: string; scheduledAt: string | null } | null>(null);
 
+  // Drift check state
+  const [driftResults, setDriftResults] = useState<Record<number, { has_drift: boolean; severity?: string; explanation?: string }>>({});
+
   // Media state
   const [mediaForId, setMediaForId] = useState<number | null>(null);
   const [mediaSuggestions, setMediaSuggestions] = useState<MediaSuggestion[]>([]);
@@ -71,7 +74,19 @@ export default function QueuePage() {
   useEffect(() => {
     api
       .get<DraftItem[]>("/api/drafts/?status=pending_review")
-      .then(setDrafts)
+      .then((data) => {
+        setDrafts(data);
+        // Check drift for each draft in background
+        data.forEach((d) => {
+          api.get<{ has_drift: boolean; severity?: string; explanation?: string }>(
+            `/api/drafts/${d.id}/drift-check`
+          ).then((result) => {
+            if (result.has_drift) {
+              setDriftResults((prev) => ({ ...prev, [d.id]: result }));
+            }
+          }).catch(() => {});
+        });
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -312,6 +327,43 @@ export default function QueuePage() {
                     </div>
                   </div>
                 </div>
+
+                {/* Voice drift warning */}
+                {driftResults[draft.id]?.has_drift && (
+                  <div className={`mx-5 mb-3 rounded-lg px-4 py-2.5 flex items-start gap-2.5 animate-fade-in ${
+                    driftResults[draft.id].severity === "high"
+                      ? "bg-rose-50 border border-rose-200"
+                      : driftResults[draft.id].severity === "medium"
+                      ? "bg-amber-50 border border-amber-200"
+                      : "bg-sky-50 border border-sky-200"
+                  }`}>
+                    <div className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 mt-0.5 ${
+                      driftResults[draft.id].severity === "high" ? "bg-rose-100" :
+                      driftResults[draft.id].severity === "medium" ? "bg-amber-100" : "bg-sky-100"
+                    }`}>
+                      <svg className={`w-3.5 h-3.5 ${
+                        driftResults[draft.id].severity === "high" ? "text-rose-600" :
+                        driftResults[draft.id].severity === "medium" ? "text-amber-600" : "text-sky-600"
+                      }`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className={`text-xs font-medium ${
+                        driftResults[draft.id].severity === "high" ? "text-rose-800" :
+                        driftResults[draft.id].severity === "medium" ? "text-amber-800" : "text-sky-800"
+                      }`}>
+                        Voice drift detected ({driftResults[draft.id].severity})
+                      </p>
+                      <p className={`text-[11px] mt-0.5 ${
+                        driftResults[draft.id].severity === "high" ? "text-rose-600" :
+                        driftResults[draft.id].severity === "medium" ? "text-amber-600" : "text-sky-600"
+                      }`}>
+                        {driftResults[draft.id].explanation}
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Approval schedule banner */}
                 {approvalInfo?.id === draft.id && (
