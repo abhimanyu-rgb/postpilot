@@ -43,6 +43,17 @@ def get_setup_status(db: Session) -> SetupStatusResponse:
 async def validate_linkedin(token: str, person_urn: str) -> tuple[bool, str]:
     try:
         async with httpx.AsyncClient() as client:
+            # Try OpenID Connect userinfo endpoint first (used by OAuth flow)
+            resp = await client.get(
+                "https://api.linkedin.com/v2/userinfo",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                name = resp.json().get("name", "")
+                return True, f"LinkedIn connected{' as ' + name if name else ''}"
+
+            # Fallback to legacy /v2/me endpoint
             resp = await client.get(
                 "https://api.linkedin.com/v2/me",
                 headers={"Authorization": f"Bearer {token}"},
@@ -50,6 +61,7 @@ async def validate_linkedin(token: str, person_urn: str) -> tuple[bool, str]:
             )
             if resp.status_code == 200:
                 return True, "LinkedIn connection validated"
+
             return False, f"LinkedIn API returned {resp.status_code}: {resp.text[:200]}"
     except httpx.RequestError as e:
         return False, f"LinkedIn connection failed: {str(e)}"
