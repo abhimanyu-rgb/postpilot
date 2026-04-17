@@ -73,8 +73,26 @@ def save_personality(data: dict):
 @router.get("/publish-queue")
 def get_publish_queue():
     """Get publish queue status: posts today, budget remaining, approved waiting."""
-    from app.backend.core.scheduler import get_publish_queue_status
-    return get_publish_queue_status()
+    from app.backend.core.scheduler import get_publish_queue_status, is_publishing_paused
+    status = get_publish_queue_status()
+    status["paused"] = is_publishing_paused()
+    return status
+
+
+@router.post("/publish-queue/pause")
+def pause_publishing():
+    """Emergency stop: pause all scheduled publishing."""
+    from app.backend.core.scheduler import set_publishing_paused
+    set_publishing_paused(True)
+    return {"paused": True}
+
+
+@router.post("/publish-queue/resume")
+def resume_publishing():
+    """Resume scheduled publishing."""
+    from app.backend.core.scheduler import set_publishing_paused
+    set_publishing_paused(False)
+    return {"paused": False}
 
 
 @router.get("/token-usage")

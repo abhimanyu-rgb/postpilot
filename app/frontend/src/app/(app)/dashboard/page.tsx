@@ -13,7 +13,7 @@ interface TokenStats {
   week: { calls: number; total_tokens: number; estimated_cost_usd: number; by_service: Record<string, number> };
   month: { calls: number; total_tokens: number; estimated_cost_usd: number; by_service: Record<string, number> };
 }
-interface PublishQueueStatus { posts_today: number; daily_budget: number; remaining: number; approved_waiting: number; queued_for_publish: number; }
+interface PublishQueueStatus { posts_today: number; daily_budget: number; remaining: number; approved_waiting: number; queued_for_publish: number; paused: boolean; }
 
 function fmt(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -124,30 +124,68 @@ export default function DashboardPage() {
           <p className="text-[10px] text-gray-400 mt-0.5">Degraded runs</p>
         </Link>
 
-        {/* Publish queue — compact ring */}
+        {/* Publish queue — compact ring + kill switch */}
         {pq && (
-          <div className="rounded-xl border border-indigo-100/50 bg-white p-4">
+          <div className={`rounded-xl border ${pq.paused ? "border-rose-200 bg-rose-50/30" : "border-indigo-100/50 bg-white"} p-4`}>
             <div className="flex items-center gap-3">
               {/* Ring */}
               <div className="relative w-12 h-12 shrink-0">
                 <svg className="w-12 h-12 -rotate-90" viewBox="0 0 36 36">
                   <circle cx="18" cy="18" r="14" fill="none" stroke="#f3f4f6" strokeWidth="3" />
                   <circle cx="18" cy="18" r="14" fill="none"
-                    stroke={pq.posts_today >= pq.daily_budget ? "#f59e0b" : "#8b5cf6"}
+                    stroke={pq.paused ? "#ef4444" : pq.posts_today >= pq.daily_budget ? "#f59e0b" : "#8b5cf6"}
                     strokeWidth="3" strokeLinecap="round"
                     strokeDasharray={`${(pq.posts_today / Math.max(1, pq.daily_budget)) * 88} 88`} />
                 </svg>
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-xs font-bold text-gray-900">{pq.posts_today}</span>
+                  {pq.paused ? (
+                    <svg className="w-4 h-4 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M10 9v6m4-6v6" /></svg>
+                  ) : (
+                    <span className="text-xs font-bold text-gray-900">{pq.posts_today}</span>
+                  )}
                 </div>
               </div>
-              <div>
-                <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Today</p>
-                <p className="text-xs text-gray-600">{pq.remaining} slot{pq.remaining !== 1 ? "s" : ""} left</p>
-                {(pq.approved_waiting > 0 || pq.queued_for_publish > 0) && (
-                  <p className="text-[10px] text-violet-600 font-medium mt-0.5">{pq.queued_for_publish || pq.approved_waiting} queued</p>
+              <div className="flex-1">
+                <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">
+                  {pq.paused ? "Paused" : "Today"}
+                </p>
+                {pq.paused ? (
+                  <p className="text-[10px] text-rose-600 font-medium">Publishing stopped</p>
+                ) : (
+                  <>
+                    <p className="text-xs text-gray-600">{pq.remaining} slot{pq.remaining !== 1 ? "s" : ""} left</p>
+                    {(pq.approved_waiting > 0 || pq.queued_for_publish > 0) && (
+                      <p className="text-[10px] text-violet-600 font-medium mt-0.5">{pq.queued_for_publish || pq.approved_waiting} queued</p>
+                    )}
+                  </>
                 )}
               </div>
+              {/* Kill switch */}
+              <button
+                onClick={async () => {
+                  await api.post(pq.paused ? "/api/setup/publish-queue/resume" : "/api/setup/publish-queue/pause");
+                  const updated = await api.get<PublishQueueStatus>("/api/setup/publish-queue");
+                  setPublishQueue(updated);
+                }}
+                title={pq.paused ? "Resume auto-publishing. Queued posts will start publishing within campaign time windows." : "Emergency stop. Pauses all scheduled publishing until you resume. Queued posts stay queued."}
+                className={`rounded-lg px-2.5 py-1.5 text-[10px] font-semibold flex items-center gap-1.5 ${
+                  pq.paused
+                    ? "bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
+                    : "bg-rose-100 text-rose-700 hover:bg-rose-200 border border-rose-200"
+                }`}
+              >
+                {pq.paused ? (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                    GO LIVE
+                  </>
+                ) : (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-rose-500" />
+                    PAUSE
+                  </>
+                )}
+              </button>
             </div>
           </div>
         )}

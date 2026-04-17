@@ -36,6 +36,9 @@ def _ensure_utc(dt: datetime) -> datetime:
 
 scheduler = BackgroundScheduler()
 
+# Global kill switch — when True, publish queue processor skips all publishes
+_publish_paused = False
+
 # Content generation runs at this hour the evening before posting day
 GENERATION_HOUR = 20  # 8 PM
 
@@ -64,15 +67,22 @@ def _schedule_campaign(campaign: Campaign) -> None:
     )
 
 
-def process_publish_queue() -> None:
-    """Check for approved posts and publish them in FIFO order.
+def is_publishing_paused() -> bool:
+    return _publish_paused
 
-    Runs every 30 minutes. Respects:
-    - Campaign posting window (only publish within the window)
-    - Global daily post limit (max posts per day across all campaigns)
-    - Min gap between posts
-    - FIFO order (oldest approved first)
-    """
+
+def set_publishing_paused(paused: bool) -> None:
+    global _publish_paused
+    _publish_paused = paused
+    logger.info("Publishing %s", "PAUSED" if paused else "RESUMED")
+
+
+def process_publish_queue() -> None:
+    """Check for approved posts and publish them in FIFO order."""
+    if _publish_paused:
+        logger.debug("Publishing paused, skipping queue")
+        return
+
     import zoneinfo
 
     db = SessionLocal()
