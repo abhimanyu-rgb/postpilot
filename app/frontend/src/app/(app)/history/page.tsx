@@ -189,6 +189,7 @@ export default function HistoryPage() {
       const existing = await api.get<Feedback | null>(`/api/drafts/${draft.id}/feedback`);
       if (existing && existing.performance_rating) {
         setLockedFeedback((prev) => ({ ...prev, [draft.id]: existing }));
+        setDrafts((prev) => prev.map((d) => d.id === draft.id ? { ...d, has_feedback: true } : d));
         setFeedbackData(existing);
       } else { setFeedbackData({ ...EMPTY_FEEDBACK }); }
     } catch { setFeedbackData({ ...EMPTY_FEEDBACK }); }
@@ -199,6 +200,7 @@ export default function HistoryPage() {
     try {
       await api.put(`/api/drafts/${draftId}/feedback`, { campaign_id: campaignId || 0, ...feedbackData });
       setLockedFeedback((prev) => ({ ...prev, [draftId]: feedbackData }));
+      setDrafts((prev) => prev.map((d) => d.id === draftId ? { ...d, has_feedback: true } : d));
       setFeedbackSaved(draftId);
     } catch (e) { alert(e instanceof Error ? e.message : "Save failed"); }
     finally { setSavingFeedback(false); }
