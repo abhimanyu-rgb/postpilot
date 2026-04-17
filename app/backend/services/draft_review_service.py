@@ -211,11 +211,16 @@ def update_draft_text(db: Session, draft_id: int, new_text: str) -> dict:
     return {"id": draft.id, "primary_text": draft.primary_text}
 
 
-def polish_draft(db: Session, draft_id: int, instructions: str = "") -> dict:
+def polish_draft(db: Session, draft_id: int, instructions: str = "", current_text: str | None = None) -> dict:
     """Use Claude to polish/rewrite a draft based on optional instructions."""
     draft = db.query(Draft).filter(Draft.id == draft_id).first()
     if not draft:
         raise HTTPException(status_code=404, detail="Draft not found")
+
+    # If user sent edited text from the frontend, save it first
+    if current_text and current_text != draft.primary_text:
+        draft.primary_text = current_text
+        db.commit()
 
     # Get campaign context for persona/tone
     sel = db.query(SelectedOpportunity).filter(

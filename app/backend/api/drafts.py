@@ -19,6 +19,7 @@ class DraftEditRequest(BaseModel):
 
 class DraftPolishRequest(BaseModel):
     instructions: str = ""
+    current_text: str | None = None
 
 
 @router.get("/")
@@ -177,7 +178,7 @@ def polish_draft(
     db: Session = Depends(get_db),
 ):
     """Use Claude to polish/rewrite a draft."""
-    return draft_review_service.polish_draft(db, draft_id, data.instructions)
+    return draft_review_service.polish_draft(db, draft_id, data.instructions, current_text=data.current_text)
 
 
 @router.get("/{draft_id}/alternates")

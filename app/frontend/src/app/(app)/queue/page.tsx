@@ -167,13 +167,23 @@ export default function QueuePage() {
   async function handlePolish(id: number) {
     setPolishingId(id);
     setPolishResult(null);
+
+    // Send the current text (edited or original) so polish works on what the user sees
+    const currentDraft = drafts.find((d) => d.id === id);
+    const textToPolish = editingId === id ? editText : currentDraft?.primary_text || "";
+
     try {
       const result = await api.post<{
         id: number;
         primary_text: string;
         version: number;
         changes_made: string;
-      }>(`/api/drafts/${id}/polish`, { instructions: polishInstructions });
+      }>(`/api/drafts/${id}/polish`, {
+        instructions: polishInstructions,
+        current_text: textToPolish,
+      });
+
+      // Update the draft text in the main view
       setDrafts((prev) =>
         prev.map((d) =>
           d.id === id
@@ -181,7 +191,16 @@ export default function QueuePage() {
             : d
         )
       );
+
+      // If user was editing, update the edit text too
+      if (editingId === id) {
+        setEditText(result.primary_text);
+      }
+
+      // Brief toast, auto-dismiss
       setPolishResult({ id, changes: result.changes_made });
+      setTimeout(() => setPolishResult(null), 5000);
+
       setShowPolishInput(null);
       setPolishInstructions("");
     } catch (e) {
@@ -523,46 +542,38 @@ export default function QueuePage() {
                   )}
                 </div>
 
-                {/* Polish result banner */}
+                {/* Polish result toast — brief, auto-dismiss */}
                 {polishResult?.id === draft.id && (
-                  <div className="mx-5 mb-3 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs text-emerald-700 flex items-center gap-2 animate-fade-in">
-                    <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                    Polished: {polishResult.changes}
+                  <div className="mx-4 mb-2 flex items-center gap-1.5 animate-fade-in">
+                    <svg className="w-3 h-3 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                    <span className="text-[10px] text-emerald-600">{polishResult.changes}</span>
                   </div>
                 )}
 
-                {/* Polish input */}
+                {/* Polish input — inline compact bar */}
                 {showPolishInput === draft.id && (
-                  <div className="mx-5 mb-3 rounded-lg border border-indigo-200 bg-indigo-50/50 p-3 space-y-2 animate-fade-in">
-                    <p className="text-xs font-medium text-indigo-700">Polish with AI</p>
+                  <div className="mx-4 mb-2 flex items-center gap-2 animate-fade-in">
                     <input
                       type="text"
                       value={polishInstructions}
                       onChange={(e) => setPolishInstructions(e.target.value)}
-                      placeholder="Optional: e.g. 'Make it more provocative' or 'Add a personal anecdote hook'"
-                      className="w-full rounded-md border border-indigo-200 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-white"
+                      placeholder="Polish instructions (optional): e.g. 'sharper hook' or 'more contrarian'"
+                      className="flex-1 rounded-lg border border-indigo-200 px-3 py-1.5 text-xs focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500/20 bg-white"
+                      onKeyDown={(e) => { if (e.key === "Enter") handlePolish(draft.id); }}
                     />
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handlePolish(draft.id)}
-                        disabled={isPolishing}
-                        className="rounded-md bg-gradient-to-r from-indigo-500 to-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:from-indigo-600 hover:to-violet-700 disabled:opacity-50 flex items-center gap-1.5"
-                      >
-                        {isPolishing ? (
-                          <><div className="animate-spin w-3 h-3 border-2 border-white border-t-transparent rounded-full" /> Polishing...</>
-                        ) : (
-                          <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg> Run Polish</>
-                        )}
-                      </button>
-                      <button
-                        onClick={() => { setShowPolishInput(null); setPolishInstructions(""); }}
-                        className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-500 hover:bg-gray-50"
-                      >
-                        Cancel
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => handlePolish(draft.id)}
+                      disabled={isPolishing}
+                      className="rounded-lg bg-gradient-to-r from-indigo-500 to-violet-600 px-3 py-1.5 text-[10px] font-medium text-white hover:from-indigo-600 hover:to-violet-700 disabled:opacity-50 shrink-0 flex items-center gap-1"
+                    >
+                      {isPolishing ? (
+                        <><div className="animate-spin w-3 h-3 border-2 border-white border-t-transparent rounded-full" /> Polishing</>
+                      ) : "Polish"}
+                    </button>
+                    <button onClick={() => { setShowPolishInput(null); setPolishInstructions(""); }}
+                      className="text-gray-400 hover:text-gray-600 shrink-0">
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
                   </div>
                 )}
 
