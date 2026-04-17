@@ -27,6 +27,13 @@ from app.backend.services.pipeline_service import execute_daily_run
 
 logger = logging.getLogger("orchestrator")
 
+
+def _ensure_utc(dt: datetime) -> datetime:
+    """Ensure a datetime is timezone-aware UTC. SQLite stores naive datetimes."""
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
 scheduler = BackgroundScheduler()
 
 # Content generation runs at this hour the evening before posting day
@@ -87,9 +94,10 @@ def process_publish_queue() -> None:
 
         # Count posts already published today (global counter)
         today_start = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_start_naive = today_start.astimezone(timezone.utc).replace(tzinfo=None)
         posts_today = (
             db.query(PublishedPost)
-            .filter(PublishedPost.published_at >= today_start.astimezone(timezone.utc))
+            .filter(PublishedPost.published_at >= today_start_naive)
             .count()
         )
 
@@ -104,7 +112,7 @@ def process_publish_queue() -> None:
             .first()
         )
         if last_post and last_post.published_at:
-            gap_end = last_post.published_at + timedelta(minutes=min_gap)
+            gap_end = _ensure_utc(last_post.published_at) + timedelta(minutes=min_gap)
             if datetime.now(timezone.utc) < gap_end:
                 logger.debug("Min gap not met yet, skipping publish queue")
                 return
@@ -129,7 +137,7 @@ def process_publish_queue() -> None:
             # Re-check min gap before each publish (not just at the start)
             last = db.query(PublishedPost).order_by(PublishedPost.published_at.desc()).first()
             if last and last.published_at:
-                if datetime.now(timezone.utc) < last.published_at + timedelta(minutes=min_gap):
+                if datetime.now(timezone.utc) < _ensure_utc(last.published_at) + timedelta(minutes=min_gap):
                     logger.debug("Min gap not met for next draft, stopping queue processing")
                     break
 
@@ -203,9 +211,10 @@ def get_publish_queue_status() -> dict:
         now_local = datetime.now(user_tz)
         today_start = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
 
+        today_start_naive = today_start.astimezone(timezone.utc).replace(tzinfo=None)
         posts_today = (
             db.query(PublishedPost)
-            .filter(PublishedPost.published_at >= today_start.astimezone(timezone.utc))
+            .filter(PublishedPost.published_at >= today_start_naive)
             .count()
         )
 
