@@ -54,39 +54,49 @@ ALWAYS:
 - Break long sentences into two shorter ones"""
 
 
-def _load_from_db() -> tuple[str | None, str | None, str | None]:
-    """Load personality fields from the DB. Returns (author_name, prompt, guardrails)."""
+def _load_from_db() -> tuple[str | None, str | None, str | None, str | None]:
+    """Load personality fields from the DB. Returns (author_name, prompt, guardrails, learned_context)."""
     db = SessionLocal()
     try:
         config = db.query(IntegrationConfig).filter(IntegrationConfig.id == 1).first()
         if config:
-            return config.author_name, config.personality_prompt, config.content_guardrails
-        return None, None, None
+            return config.author_name, config.personality_prompt, config.content_guardrails, config.learned_context
+        return None, None, None, None
     finally:
         db.close()
 
 
 def get_personality_prompt() -> str:
     """Return the personality prompt block. DB first, then default."""
-    _, prompt, _ = _load_from_db()
+    _, prompt, _, _ = _load_from_db()
     return prompt or DEFAULT_PERSONALITY_PROMPT
 
 
 def get_content_guardrails() -> str:
     """Return the content guardrails block. DB first, then default."""
-    _, _, guardrails = _load_from_db()
+    _, _, guardrails, _ = _load_from_db()
     return guardrails or DEFAULT_CONTENT_GUARDRAILS
 
 
+def get_learned_context() -> str:
+    """Return the learned context block (system-generated, user-editable)."""
+    _, _, _, learned = _load_from_db()
+    return learned or ""
+
+
 def get_full_personality_context() -> str:
-    """Return guardrails + personality prompt combined.
+    """Return guardrails + personality + learned context merged.
 
     Priority order (highest first):
     1. Guardrails (strict rules, override everything)
-    2. Personality profile (voice and style)
-    Feedback learnings and source content are injected separately in the prompt.
+    2. Personality profile (user-written voice and style)
+    3. Learned context (system-generated insights from feedback, user-editable)
     """
-    return f"{get_content_guardrails()}\n\n{get_personality_prompt()}"
+    parts = [get_content_guardrails(), get_personality_prompt()]
+    learned = get_learned_context()
+    if learned:
+        parts.append(f"## Learned from Past Performance\n{learned}")
+    return "\n\n".join(parts)
 
 
 def save_personality_profile(
@@ -101,7 +111,20 @@ def save_personality_profile(
         if config:
             config.author_name = author_name
             config.personality_prompt = personality_prompt
-            config.content_guardrails = content_guardrails
+            if content_guardrails is not None:
+                config.content_guardrails = content_guardrails
+            db.commit()
+    finally:
+        db.close()
+
+
+def save_learned_context(learned_context: str) -> None:
+    """Save the learned context to the DB."""
+    db = SessionLocal()
+    try:
+        config = db.query(IntegrationConfig).filter(IntegrationConfig.id == 1).first()
+        if config:
+            config.learned_context = learned_context
             db.commit()
     finally:
         db.close()
@@ -109,10 +132,11 @@ def save_personality_profile(
 
 def get_saved_profile() -> dict:
     """Return the saved profile for the settings UI."""
-    name, prompt, guardrails = _load_from_db()
+    name, prompt, guardrails, learned = _load_from_db()
     return {
         "author_name": name or "",
         "personality_prompt": prompt or DEFAULT_PERSONALITY_PROMPT,
         "content_guardrails": guardrails or DEFAULT_CONTENT_GUARDRAILS,
+        "learned_context": learned or "",
         "is_default": prompt is None,
     }

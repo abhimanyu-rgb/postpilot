@@ -52,10 +52,13 @@ async def validate_from_env(db: Session = Depends(get_db)):
 
 
 @router.get("/personality")
-def get_personality():
-    """Get the current personality profile for the settings editor."""
+def get_personality(db: Session = Depends(get_db)):
+    """Get the current personality profile with evolution suggestions."""
     from app.backend.services.personality_service import get_saved_profile
-    return get_saved_profile()
+    from app.backend.services.voice_memory import get_evolution_log
+    profile = get_saved_profile()
+    profile["evolution_suggestions"] = get_evolution_log(db)
+    return profile
 
 
 @router.put("/personality")
@@ -100,6 +103,14 @@ def get_token_usage(db: Session = Depends(get_db)):
     """Get token usage stats for the dashboard."""
     from app.backend.services.token_tracker import get_usage_stats
     return get_usage_stats(db)
+
+
+@router.put("/personality/learned")
+def save_learned(data: dict):
+    """Save the learned context from the settings editor."""
+    from app.backend.services.personality_service import save_learned_context
+    save_learned_context(data.get("learned_context", ""))
+    return {"success": True}
 
 
 @router.get("/personality/evolution")

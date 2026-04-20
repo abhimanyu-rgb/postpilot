@@ -133,15 +133,83 @@ export default function QueuePage() {
   }
 
   async function handleReject(id: number) {
+    if (!confirm("Reject this draft? It will move to history.")) return;
     setActionLoading(id);
     try {
       await api.post(`/api/drafts/${id}/reject`);
       setDrafts((prev) => prev.filter((d) => d.id !== id));
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Reject failed");
+    } catch (e: unknown) {
+      const err = e as { body?: { detail?: string }; message?: string };
+      alert(err?.body?.detail || err?.message || "Reject failed");
     } finally {
       setActionLoading(null);
     }
+  }
+
+  // Unicode formatting for LinkedIn
+  const BOLD_MAP: Record<string, string> = {};
+  const ITALIC_MAP: Record<string, string> = {};
+  const REVERSE_MAP: Record<string, string> = {};
+  "abcdefghijklmnopqrstuvwxyz".split("").forEach((c, i) => {
+    const b = String.fromCodePoint(0x1d5ee + i);
+    const B = String.fromCodePoint(0x1d5d4 + i);
+    const it = String.fromCodePoint(0x1d608 + i);
+    BOLD_MAP[c] = b;
+    BOLD_MAP[c.toUpperCase()] = B;
+    ITALIC_MAP[c] = it;
+    REVERSE_MAP[b] = c;
+    REVERSE_MAP[B] = c.toUpperCase();
+    REVERSE_MAP[it] = c;
+  });
+  "0123456789".split("").forEach((c, i) => {
+    const b = String.fromCodePoint(0x1d7ec + i);
+    BOLD_MAP[c] = b;
+    REVERSE_MAP[b] = c;
+  });
+
+  function toUnicodeBold(text: string): string {
+    return [...text].map((c) => BOLD_MAP[c] || c).join("");
+  }
+  function toUnicodeItalic(text: string): string {
+    return [...text].map((c) => ITALIC_MAP[c] || c).join("");
+  }
+  function toPlainText(text: string): string {
+    return [...text].map((c) => REVERSE_MAP[c] || c).join("");
+  }
+
+  function applyFormat(type: "bold" | "italic" | "plain" | "bullet" | "line") {
+    const el = document.getElementById("draft-editor") as HTMLTextAreaElement | null;
+    if (!el) return;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const selected = editText.slice(start, end);
+
+    let replacement = selected;
+    let cursorOffset = 0;
+
+    if (type === "bold" && selected) {
+      replacement = toUnicodeBold(selected);
+    } else if (type === "italic" && selected) {
+      replacement = toUnicodeItalic(selected);
+    } else if (type === "plain" && selected) {
+      replacement = toPlainText(selected);
+    } else if (type === "bullet") {
+      replacement = selected ? selected.split("\n").map((l) => `\u2022 ${l}`).join("\n") : "\u2022 ";
+      cursorOffset = replacement.length;
+    } else if (type === "line") {
+      replacement = "\n\u2014\u2014\u2014\u2014\u2014\n";
+      cursorOffset = replacement.length;
+    }
+
+    const newText = editText.slice(0, start) + replacement + editText.slice(end);
+    setEditText(newText);
+
+    // Restore cursor
+    setTimeout(() => {
+      el.focus();
+      const pos = start + (cursorOffset || replacement.length);
+      el.setSelectionRange(pos, pos);
+    }, 0);
   }
 
   function startEdit(draft: DraftItem) {
@@ -305,7 +373,8 @@ export default function QueuePage() {
             </svg>
           </div>
           <h3 className="text-sm font-medium text-gray-700 mb-1">No drafts pending review</h3>
-          <p className="text-sm text-gray-400">Drafts will appear here after a pipeline run.</p>
+          <p className="text-xs text-gray-400 mb-3">Drafts appear after campaign runs or when you write a post.</p>
+          <a href="/write" className="text-xs font-medium text-violet-600 hover:text-violet-700">Write a Post</a>
         </div>
       ) : (
         <div className="space-y-4">
@@ -429,11 +498,27 @@ export default function QueuePage() {
                 <div className="px-4 pb-2.5">
                   {isEditing ? (
                     <div className="space-y-2">
+                      {/* Formatting toolbar */}
+                      <div className="flex items-center gap-1 border border-gray-200 rounded-lg px-2 py-1 bg-gray-50">
+                        <button type="button" onClick={() => applyFormat("bold")} title="Bold: select text then click"
+                          className="px-1.5 py-0.5 rounded hover:bg-gray-200 text-xs font-bold text-gray-600">B</button>
+                        <button type="button" onClick={() => applyFormat("italic")} title="Italic: select text then click"
+                          className="px-1.5 py-0.5 rounded hover:bg-gray-200 text-xs italic text-gray-600">I</button>
+                        <button type="button" onClick={() => applyFormat("plain")} title="Remove formatting: select text then click"
+                          className="px-1.5 py-0.5 rounded hover:bg-gray-200 text-[10px] text-gray-500 underline">Plain</button>
+                        <div className="w-px h-4 bg-gray-300 mx-1" />
+                        <button type="button" onClick={() => applyFormat("bullet")} title="Add bullet point"
+                          className="px-1.5 py-0.5 rounded hover:bg-gray-200 text-xs text-gray-600">&#8226; List</button>
+                        <button type="button" onClick={() => applyFormat("line")} title="Add separator line"
+                          className="px-1.5 py-0.5 rounded hover:bg-gray-200 text-xs text-gray-600">&#8212;</button>
+                        <span className="text-[9px] text-gray-400 ml-auto">Select text, then format</span>
+                      </div>
                       <textarea
+                        id="draft-editor"
                         value={editText}
                         onChange={(e) => setEditText(e.target.value)}
                         rows={10}
-                        className="w-full rounded-lg border border-indigo-300 p-4 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 resize-none font-mono leading-relaxed"
+                        className="w-full rounded-lg border border-indigo-300 p-4 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 resize-none leading-relaxed"
                       />
                       {/* Character counter with fold indicator */}
                       <div className="flex items-center justify-between">
@@ -477,18 +562,18 @@ export default function QueuePage() {
                           <p className="text-[10px] text-gray-400">Just now</p>
                         </div>
                       </div>
-                      {/* Post text with fold */}
+                      {/* Post text with fold — uses live text if editing */}
                       <div className="px-4 pb-3">
-                        {draft.primary_text.length <= 210 ? (
-                          <p className="text-[13px] text-gray-900 whitespace-pre-wrap leading-[1.4]">{draft.primary_text}</p>
+                        {(() => { const t = isEditing ? editText : draft.primary_text; return t.length <= 210 ? (
+                          <p className="text-[13px] text-gray-900 whitespace-pre-wrap leading-[1.4]">{t}</p>
                         ) : (
                           <div>
                             <p className="text-[13px] text-gray-900 whitespace-pre-wrap leading-[1.4]">
-                              {draft.primary_text.slice(0, 210)}
+                              {t.slice(0, 210)}
                               <span className="text-[13px] text-gray-500 font-medium cursor-pointer">...see more</span>
                             </p>
                           </div>
-                        )}
+                        ); })()}
                       </div>
                       {/* LinkedIn reaction bar */}
                       <div className="border-t border-gray-100 px-4 py-2 flex items-center justify-between">

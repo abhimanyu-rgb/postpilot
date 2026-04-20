@@ -30,23 +30,29 @@ def list_drafts(db: Session, status_filter: str | None = None) -> list[dict]:
     result = []
 
     for draft in drafts:
-        sel = (
-            db.query(SelectedOpportunity)
-            .filter(SelectedOpportunity.id == draft.selected_opportunity_id)
-            .first()
-        )
+        # User-generated drafts have selected_opportunity_id=0
+        is_user_draft = draft.selected_opportunity_id == 0
+
+        sel = None
         candidate = None
-        campaign_name = ""
-        if sel:
-            candidate = (
-                db.query(CandidateOpportunity)
-                .filter(CandidateOpportunity.id == sel.candidate_id)
+        campaign_name = "Your Post" if is_user_draft else ""
+
+        if not is_user_draft:
+            sel = (
+                db.query(SelectedOpportunity)
+                .filter(SelectedOpportunity.id == draft.selected_opportunity_id)
                 .first()
             )
-            from app.backend.models.campaign import Campaign
+            if sel:
+                candidate = (
+                    db.query(CandidateOpportunity)
+                    .filter(CandidateOpportunity.id == sel.candidate_id)
+                    .first()
+                )
+                from app.backend.models.campaign import Campaign
 
-            campaign = db.query(Campaign).filter(Campaign.id == sel.campaign_id).first()
-            campaign_name = campaign.name if campaign else ""
+                campaign = db.query(Campaign).filter(Campaign.id == sel.campaign_id).first()
+                campaign_name = campaign.name if campaign else ""
 
         # Get publish info if published
         published = (
@@ -77,9 +83,9 @@ def list_drafts(db: Session, status_filter: str | None = None) -> list[dict]:
                 "created_at": str(draft.created_at),
                 "campaign_name": campaign_name,
                 "campaign_id": sel.campaign_id if sel else None,
-                "headline": candidate.headline if candidate else "",
-                "narrative_type": candidate.narrative_type if candidate else "",
-                "selection_date": sel.selection_date if sel else "",
+                "headline": candidate.headline if candidate else (draft.grounding_summary[:60] if draft.grounding_summary else "User post"),
+                "narrative_type": candidate.narrative_type if candidate else "user_generated",
+                "selection_date": sel.selection_date if sel else str(draft.created_at)[:10],
                 "published_at": str(published.published_at) if published else None,
                 "linkedin_post_ref": published.external_ref if published else None,
                 "has_feedback": has_feedback,
@@ -222,16 +228,18 @@ def polish_draft(db: Session, draft_id: int, instructions: str = "", current_tex
         draft.primary_text = current_text
         db.commit()
 
-    # Get campaign context for persona/tone
-    sel = db.query(SelectedOpportunity).filter(
-        SelectedOpportunity.id == draft.selected_opportunity_id
-    ).first()
+    # Get campaign context for persona/tone (user drafts have id=0)
+    sel = None
     campaign = None
-    if sel:
-        campaign = db.query(Campaign).filter(Campaign.id == sel.campaign_id).first()
+    if draft.selected_opportunity_id and draft.selected_opportunity_id > 0:
+        sel = db.query(SelectedOpportunity).filter(
+            SelectedOpportunity.id == draft.selected_opportunity_id
+        ).first()
+        if sel:
+            campaign = db.query(Campaign).filter(Campaign.id == sel.campaign_id).first()
 
-    persona = campaign.persona if campaign else ""
-    tone = campaign.tone if campaign else "professional"
+    persona = campaign.persona if campaign else "As defined in personality profile"
+    tone = campaign.tone if campaign else "thought-leader"
     topics = json.loads(campaign.topics_json) if campaign else []
 
     from app.backend.services.personality_service import get_content_guardrails, get_personality_prompt
@@ -264,6 +272,7 @@ def polish_draft(db: Session, draft_id: int, instructions: str = "", current_tex
 - Keep the author's voice. Do not make it sound generic or hypey.
 - Keep length 500-1100 characters.
 - No hashtag spam, no emoji overload.
+- Preserve any Unicode bold/italic formatting in the text. Do not convert it to plain text.
 - Return ONLY a JSON object with the polished post.
 
 ## Output Format

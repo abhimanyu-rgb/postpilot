@@ -22,6 +22,22 @@ class DraftPolishRequest(BaseModel):
     current_text: str | None = None
 
 
+class UserDraftRequest(BaseModel):
+    topic: str
+    notes: str = ""
+    enrich_with_sources: bool = True
+
+
+@router.post("/write")
+def write_user_draft(
+    data: UserDraftRequest,
+    db: Session = Depends(get_db),
+):
+    """Generate a draft from a user-provided topic."""
+    from app.backend.services.user_draft_service import generate_user_draft
+    return generate_user_draft(db, data.topic, data.notes, data.enrich_with_sources)
+
+
 @router.get("/")
 def list_drafts(
     status: str | None = Query(default=None),

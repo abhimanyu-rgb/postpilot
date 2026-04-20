@@ -163,6 +163,7 @@ export default function DashboardPage() {
               {/* Kill switch */}
               <button
                 onClick={async () => {
+                  if (!pq.paused && !confirm("Pause all scheduled publishing? Queued posts will stop going out until you resume.")) return;
                   await api.post(pq.paused ? "/api/setup/publish-queue/resume" : "/api/setup/publish-queue/pause");
                   const updated = await api.get<PublishQueueStatus>("/api/setup/publish-queue");
                   setPublishQueue(updated);

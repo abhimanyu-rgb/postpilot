@@ -101,13 +101,18 @@ export default function CampaignDetailPage() {
     setTriggerLoading(true);
     try {
       await api.post(`/api/runs/${id}/trigger?force=true`);
-      setTimeout(async () => {
+      // Poll for run completion every 5s for up to 2 minutes
+      for (let i = 0; i < 24; i++) {
+        await new Promise((r) => setTimeout(r, 5000));
         const r = await api.get<{ runs: Run[] }>(`/api/runs/${id}`).catch(() => ({ runs: [] }));
         setRuns(r.runs);
-        setTriggerLoading(false);
-      }, 2000);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Trigger failed");
+        const latest = r.runs[0];
+        if (latest && latest.status !== "running") break;
+      }
+    } catch (e: unknown) {
+      const err = e as { body?: { detail?: string }; message?: string };
+      alert(err?.body?.detail || err?.message || "Trigger failed");
+    } finally {
       setTriggerLoading(false);
     }
   }

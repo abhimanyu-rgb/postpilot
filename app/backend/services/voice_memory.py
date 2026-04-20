@@ -259,6 +259,16 @@ Only suggest changes supported by clear patterns (3+ consistent signals). Do not
             existing_log.append(log_entry)
             # Keep last 10 entries
             config.personality_evolution_log = json.dumps(existing_log[-10:])
+
+            # Auto-append new suggestions to learned_context
+            new_lines = []
+            for s in result.get("suggestions", []):
+                new_lines.append(f"- [{s.get('area', 'general')}] {s.get('suggested', '')} (learned: {s.get('reason', '')})")
+            if new_lines:
+                existing_learned = config.learned_context or ""
+                separator = "\n" if existing_learned else ""
+                config.learned_context = (existing_learned + separator + "\n".join(new_lines)).strip()
+
             db.commit()
 
             logger.info("Personality evolution analyzed: %s", result.get("summary"))

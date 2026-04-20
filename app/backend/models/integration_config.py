@@ -24,6 +24,9 @@ class IntegrationConfig(Base, IdMixin, FullTimestampMixin):
     personality_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     content_guardrails: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Learned context: system-generated insights from feedback, user-editable
+    learned_context: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # Voice memory: rolling summary of published positions (updated after each publish)
     voice_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
     voice_snapshot_post_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
