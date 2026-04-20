@@ -69,19 +69,24 @@ const CAMPAIGN_COLORS = [
 ];
 
 function fmtDate(dateStr: string | null): string {
-  if (!dateStr) return "";
+  if (!dateStr || dateStr === "None" || dateStr === "null") return "";
   try {
-    const d = new Date(dateStr.includes("T") ? dateStr : dateStr + "T00:00:00");
+    // Handle: "2026-04-15", "2026-04-15 10:30:00", "2026-04-15T10:30:00"
+    const cleaned = dateStr.trim().replace(" ", "T");
+    const d = new Date(cleaned.includes("T") ? cleaned : cleaned + "T00:00:00");
+    if (isNaN(d.getTime())) return "";
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  } catch { return dateStr; }
+  } catch { return ""; }
 }
 
 function fmtDateTime(dateStr: string | null): string {
-  if (!dateStr) return "";
+  if (!dateStr || dateStr === "None" || dateStr === "null") return "";
   try {
-    const d = new Date(dateStr.includes("T") ? dateStr : dateStr + "T00:00:00");
+    const cleaned = dateStr.trim().replace(" ", "T");
+    const d = new Date(cleaned.includes("T") ? cleaned : cleaned + "T00:00:00");
+    if (isNaN(d.getTime())) return "";
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-  } catch { return dateStr; }
+  } catch { return ""; }
 }
 
 function getCampaignColor(id: number | null) {
@@ -226,11 +231,12 @@ export default function HistoryPage() {
     archived: drafts.filter((d) => d.status === "archived").length,
   };
 
-  // Group by month
+  // Group by month — use best available date, skip "None" strings
   const grouped: Record<string, DraftItem[]> = {};
   for (const d of filtered) {
-    const date = d.published_at || d.selection_date || d.created_at;
-    const month = date ? date.substring(0, 7) : "unknown";
+    const pub = d.published_at && d.published_at !== "None" ? d.published_at : null;
+    const date = pub || d.selection_date || d.created_at;
+    const month = date && date !== "None" ? date.substring(0, 7) : "unknown";
     const label = month !== "unknown" ? new Date(month + "-01").toLocaleDateString("en-US", { month: "long", year: "numeric" }) : "Other";
     if (!grouped[label]) grouped[label] = [];
     grouped[label].push(d);
@@ -290,7 +296,7 @@ export default function HistoryPage() {
       {viewMode === "calendar" && (
         <div className="rounded-xl border border-indigo-100/50 bg-white shadow-sm p-4 mb-6">
           {(() => {
-            const publishedPosts = drafts.filter((d) => d.status === "published" && d.published_at);
+            const publishedPosts = drafts.filter((d) => d.status === "published" && d.published_at && d.published_at !== "None");
             const byDay: Record<string, DraftItem[]> = {};
             publishedPosts.forEach((d) => {
               const day = fmtDate(d.published_at);

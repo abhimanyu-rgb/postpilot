@@ -86,7 +86,7 @@ def list_drafts(db: Session, status_filter: str | None = None) -> list[dict]:
                 "headline": candidate.headline if candidate else (draft.grounding_summary[:60] if draft.grounding_summary else "User post"),
                 "narrative_type": candidate.narrative_type if candidate else "user_generated",
                 "selection_date": sel.selection_date if sel else str(draft.created_at)[:10],
-                "published_at": str(published.published_at) if published else None,
+                "published_at": str(published.published_at) if published and published.published_at else None,
                 "linkedin_post_ref": published.external_ref if published else None,
                 "has_feedback": has_feedback,
             }
