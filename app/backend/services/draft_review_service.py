@@ -103,8 +103,8 @@ def approve_draft(db: Session, draft_id: int) -> dict:
     draft = db.query(Draft).filter(Draft.id == draft_id).first()
     if not draft:
         raise HTTPException(status_code=404, detail="Draft not found")
-    if draft.status != "pending_review":
-        raise HTTPException(status_code=409, detail=f"Draft is already {draft.status}")
+    if draft.status == "published":
+        raise HTTPException(status_code=409, detail="Draft is already published")
 
     draft.status = "approved"
 
@@ -188,8 +188,8 @@ def reject_draft(db: Session, draft_id: int, reason: str = "") -> dict:
     draft = db.query(Draft).filter(Draft.id == draft_id).first()
     if not draft:
         raise HTTPException(status_code=404, detail="Draft not found")
-    if draft.status != "pending_review":
-        raise HTTPException(status_code=409, detail=f"Draft is already {draft.status}")
+    if draft.status == "published":
+        raise HTTPException(status_code=409, detail="Draft is already published")
 
     draft.status = "rejected"
 

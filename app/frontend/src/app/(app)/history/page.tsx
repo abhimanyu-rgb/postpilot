@@ -114,8 +114,15 @@ export default function HistoryPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
 
+  async function refetchDrafts() {
+    try {
+      const fresh = await api.get<DraftItem[]>("/api/drafts/");
+      setDrafts(fresh);
+    } catch { /* silent — keep stale data rather than blank the page */ }
+  }
+
   useEffect(() => {
-    api.get<DraftItem[]>("/api/drafts/").then(setDrafts).catch(() => {}).finally(() => setLoading(false));
+    refetchDrafts().finally(() => setLoading(false));
   }, []);
 
   // Actions
@@ -125,10 +132,11 @@ export default function HistoryPage() {
     try {
       const result = await api.post<{ id: number; message: string }>(`/api/drafts/${id}/publish`);
       setPublishResult({ id, message: result.message });
-      setDrafts((prev) => prev.map((d) => d.id === id ? { ...d, status: "queued" } : d));
+      await refetchDrafts();
     } catch (e: unknown) {
       const err = e as { body?: { detail?: string }; message?: string };
       setPublishResult({ id, message: err?.body?.detail || err?.message || "Failed", error: true });
+      await refetchDrafts();
     } finally { setPublishingId(null); }
   }
 
@@ -140,19 +148,19 @@ export default function HistoryPage() {
 
   async function handleRevert(id: number) {
     await api.post(`/api/drafts/${id}/revert`).catch(() => {});
-    setDrafts((prev) => prev.map((d) => d.id === id ? { ...d, status: "pending_review" } : d));
+    await refetchDrafts();
   }
 
   async function handleArchive(id: number) {
     await api.post(`/api/drafts/${id}/archive`).catch(() => {});
-    setDrafts((prev) => prev.map((d) => d.id === id ? { ...d, status: "archived" } : d));
     setSelected((prev) => { const n = new Set(prev); n.delete(id); return n; });
+    await refetchDrafts();
   }
 
   async function handleBulkArchive() {
     await Promise.all(Array.from(selected).map((id) => api.post(`/api/drafts/${id}/archive`).catch(() => {})));
-    setDrafts((prev) => prev.map((d) => selected.has(d.id) ? { ...d, status: "archived" } : d));
     setSelected(new Set());
+    await refetchDrafts();
   }
 
   async function handleDelete(id: number) {

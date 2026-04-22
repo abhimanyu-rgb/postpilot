@@ -130,7 +130,7 @@ def process_publish_queue() -> None:
         # Get queued drafts in FIFO order (oldest first)
         queued_drafts = (
             db.query(Draft)
-            .filter(Draft.status == "queued")
+            .filter(Draft.status.in_(["approved", "queued", "queued_for_publish"]))
             .order_by(Draft.created_at.asc())
             .all()
         )

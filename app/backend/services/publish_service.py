@@ -36,10 +36,10 @@ def queue_for_publish(db: Session, draft_id: int) -> dict:
     draft = db.query(Draft).filter(Draft.id == draft_id).first()
     if not draft:
         raise HTTPException(status_code=404, detail="Draft not found")
-    if draft.status not in ("approved", "queued"):
+    if draft.status == "published":
         raise HTTPException(
             status_code=409,
-            detail=f"Draft must be approved before queuing (current: {draft.status})",
+            detail="Draft is already published",
         )
 
     draft.status = "queued"
