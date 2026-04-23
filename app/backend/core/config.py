@@ -25,7 +25,10 @@ class Settings(BaseSettings):
 
     news_api_key: str = ""
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {
+        "env_file": str(Path(__file__).resolve().parents[3] / ".env"),
+        "env_file_encoding": "utf-8",
+    }
 
     @property
     def data_path(self) -> Path:
