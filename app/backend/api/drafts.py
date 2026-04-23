@@ -26,6 +26,8 @@ class UserDraftRequest(BaseModel):
     topic: str
     notes: str = ""
     enrich_with_sources: bool = True
+    posting_window_start: str = "09:00"
+    posting_window_end: str = "18:00"
 
 
 @router.post("/write")
@@ -35,7 +37,14 @@ def write_user_draft(
 ):
     """Generate a draft from a user-provided topic."""
     from app.backend.services.user_draft_service import generate_user_draft
-    return generate_user_draft(db, data.topic, data.notes, data.enrich_with_sources)
+    return generate_user_draft(
+        db,
+        data.topic,
+        data.notes,
+        data.enrich_with_sources,
+        posting_window_start=data.posting_window_start,
+        posting_window_end=data.posting_window_end,
+    )
 
 
 @router.get("/")

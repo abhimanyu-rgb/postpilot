@@ -151,22 +151,29 @@ def process_publish_queue() -> None:
                     logger.debug("Min gap not met for next draft, stopping queue processing")
                     break
 
-            # Get the campaign for this draft to check posting window
-            sel = (
-                db.query(SelectedOpportunity)
-                .filter(SelectedOpportunity.id == draft.selected_opportunity_id)
-                .first()
-            )
-            if not sel:
-                continue
+            # Resolve posting window: draft override (user-drafted posts) > campaign > default
+            campaign = None
+            if draft.selected_opportunity_id and draft.selected_opportunity_id > 0:
+                sel = (
+                    db.query(SelectedOpportunity)
+                    .filter(SelectedOpportunity.id == draft.selected_opportunity_id)
+                    .first()
+                )
+                if not sel:
+                    continue
+                campaign = db.query(Campaign).filter(Campaign.id == sel.campaign_id).first()
+                if not campaign:
+                    continue
 
-            campaign = db.query(Campaign).filter(Campaign.id == sel.campaign_id).first()
-            if not campaign:
-                continue
-
-            # Check if we're within this campaign's posting window
-            window_start = campaign.posting_window_start or "09:00"
-            window_end = campaign.posting_window_end or "18:00"
+            if draft.posting_window_start and draft.posting_window_end:
+                window_start = draft.posting_window_start
+                window_end = draft.posting_window_end
+            elif campaign:
+                window_start = campaign.posting_window_start or "09:00"
+                window_end = campaign.posting_window_end or "18:00"
+            else:
+                window_start = "09:00"
+                window_end = "18:00"
 
             try:
                 start_h, start_m = int(window_start.split(":")[0]), int(window_start.split(":")[1])
@@ -185,9 +192,9 @@ def process_publish_queue() -> None:
                 from app.backend.services.publish_service import execute_publish
                 result = execute_publish(db, draft.id)
                 logger.info(
-                    "Auto-published draft %d for campaign '%s' (%d/%d today)",
+                    "Auto-published draft %d for %s (%d/%d today)",
                     draft.id,
-                    campaign.name,
+                    f"campaign '{campaign.name}'" if campaign else "user post",
                     posts_today + 1,
                     daily_budget,
                 )

@@ -9,6 +9,8 @@ export default function WritePage() {
   const [topic, setTopic] = useState("");
   const [notes, setNotes] = useState("");
   const [enrichSources, setEnrichSources] = useState(true);
+  const [windowStart, setWindowStart] = useState("09:00");
+  const [windowEnd, setWindowEnd] = useState("18:00");
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState<{
     id: number;
@@ -35,6 +37,8 @@ export default function WritePage() {
         topic: topic.trim(),
         notes: notes.trim(),
         enrich_with_sources: enrichSources,
+        posting_window_start: windowStart,
+        posting_window_end: windowEnd,
       });
       setResult(res);
     } catch (e: unknown) {
@@ -90,6 +94,27 @@ export default function WritePage() {
               />
               <span className="text-xs text-gray-600">Enrich with recent news and sources</span>
             </label>
+          </div>
+
+          {/* Posting window (locked after generate) */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">Posting window</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="time"
+                value={windowStart}
+                onChange={(e) => setWindowStart(e.target.value)}
+                className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+              />
+              <span className="text-xs text-gray-400">to</span>
+              <input
+                type="time"
+                value={windowEnd}
+                onChange={(e) => setWindowEnd(e.target.value)}
+                className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+              />
+              <span className="text-[11px] text-gray-400 ml-1">Auto-publishes in this window (FIFO with campaigns). Locked after generation.</span>
+            </div>
           </div>
 
           {/* Error */}

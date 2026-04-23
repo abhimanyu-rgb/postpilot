@@ -24,6 +24,8 @@ class Draft(Base, IdMixin, TimestampMixin):
     critic_version: Mapped[str] = mapped_column(String, nullable=False)
     media_suggestions_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     selected_media_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    posting_window_start: Mapped[str | None] = mapped_column(String(5), nullable=True)
+    posting_window_end: Mapped[str | None] = mapped_column(String(5), nullable=True)
 
     __table_args__ = (
         Index("idx_draft_selected_version", "selected_opportunity_id", "version"),

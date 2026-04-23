@@ -25,6 +25,8 @@ def generate_user_draft(
     topic: str,
     notes: str = "",
     enrich_with_sources: bool = True,
+    posting_window_start: str = "09:00",
+    posting_window_end: str = "18:00",
 ) -> dict:
     """Generate a draft from a user-provided topic.
 
@@ -134,6 +136,8 @@ Return ONLY a JSON object:
         profile_used=True,
         prompt_version="v1.0-user",
         critic_version="v1.0",
+        posting_window_start=posting_window_start,
+        posting_window_end=posting_window_end,
     )
     db.add(draft)
     db.commit()
