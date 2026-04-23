@@ -102,6 +102,13 @@ export default function QueuePage() {
     setActionLoading(id);
     setApprovalInfo(null);
     try {
+      // Persist any unsaved manual edits before approving
+      if (editingId === id && editText.trim()) {
+        await api.put(`/api/drafts/${id}/text`, { primary_text: editText });
+        setDrafts((prev) => prev.map((d) => (d.id === id ? { ...d, primary_text: editText } : d)));
+        setEditingId(null);
+      }
+
       // Save selected media before approving
       if (selectedMedia.size > 0) {
         await api.put(`/api/drafts/${id}/media`, {
