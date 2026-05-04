@@ -17,6 +17,9 @@ class CampaignCreate(BaseModel):
     novelty_cooldown_days: int = Field(ge=1, le=30, default=3)
     profile_adherence_override: str | None = None
     custom_rss_feeds_json: list[str] | None = None
+    prompt_avoid: str | None = None
+    prompt_prioritize: str | None = None
+    prompt_archetypes: str | None = None
 
 
 class CampaignUpdate(BaseModel):
@@ -33,6 +36,9 @@ class CampaignUpdate(BaseModel):
     novelty_cooldown_days: int | None = Field(default=None, ge=1, le=30)
     profile_adherence_override: str | None = None
     custom_rss_feeds_json: list[str] | None = None
+    prompt_avoid: str | None = None
+    prompt_prioritize: str | None = None
+    prompt_archetypes: str | None = None
 
 
 class CampaignResponse(BaseModel):
@@ -51,6 +57,9 @@ class CampaignResponse(BaseModel):
     novelty_cooldown_days: int
     profile_adherence_override: str | None
     custom_rss_feeds_json: str | None
+    prompt_avoid: str | None
+    prompt_prioritize: str | None
+    prompt_archetypes: str | None
     created_at: datetime
     updated_at: datetime
 

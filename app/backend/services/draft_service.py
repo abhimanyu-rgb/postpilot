@@ -21,6 +21,34 @@ DRAFT_PROMPT_VERSION = "v1.0"
 CRITIC_VERSION = "v1.0"
 
 
+def _build_campaign_instructions_section(campaign: Campaign) -> str:
+    """Per-campaign user-authored instructions (avoid / prioritize / archetypes).
+
+    Scoped to this campaign only — does not leak into global personality or feedback.
+    Each block is rendered only if non-empty.
+    """
+    parts: list[str] = []
+    avoid = (campaign.prompt_avoid or "").strip()
+    prioritize = (campaign.prompt_prioritize or "").strip()
+    archetypes = (campaign.prompt_archetypes or "").strip()
+
+    if not (avoid or prioritize or archetypes):
+        return ""
+
+    parts.append("## Campaign-Specific Instructions")
+    parts.append("(Apply only to this campaign. Treat as harder constraints than personality, softer than guardrails.)")
+    if prioritize:
+        parts.append("\n### Prioritize")
+        parts.append(prioritize)
+    if avoid:
+        parts.append("\n### Avoid")
+        parts.append(avoid)
+    if archetypes:
+        parts.append("\n### Reference Archetypes")
+        parts.append(archetypes)
+    return "\n".join(parts) + "\n"
+
+
 def _build_draft_system_prompt(campaign: Campaign, feedback_context: str = "") -> str:
     from app.backend.services.personality_service import (
         get_content_guardrails,
@@ -31,13 +59,16 @@ def _build_draft_system_prompt(campaign: Campaign, feedback_context: str = "") -
     feedback_section = f"\n{feedback_context}\n" if feedback_context else ""
     guardrails = get_content_guardrails()
     personality = get_personality_prompt()
+    campaign_instructions = _build_campaign_instructions_section(campaign)
+    campaign_section = f"\n{campaign_instructions}" if campaign_instructions else ""
     return f"""You are a LinkedIn ghostwriter for a thought leader. Write an engaging LinkedIn post based on the provided content opportunity and source material.
 
 ## Priority Order (follow strictly)
 1. Content guardrails (never violate)
 2. Source content (ground the post in real facts)
-3. Feedback learnings (apply what worked before)
-4. Personality profile (match the author's voice)
+3. Campaign-specific instructions (avoid / prioritize / archetypes for this campaign)
+4. Feedback learnings (apply what worked before)
+5. Personality profile (match the author's voice)
 
 {guardrails}
 
@@ -45,7 +76,7 @@ def _build_draft_system_prompt(campaign: Campaign, feedback_context: str = "") -
 - **Topics of expertise**: {", ".join(topics)}
 - **Persona**: {campaign.persona}
 - **Tone**: {campaign.tone}
-{feedback_section}
+{campaign_section}{feedback_section}
 {personality}
 
 ## LinkedIn Post Guidelines

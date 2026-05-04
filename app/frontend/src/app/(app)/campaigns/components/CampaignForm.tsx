@@ -15,6 +15,9 @@ export interface CampaignFormData {
   novelty_cooldown_days: number;
   profile_adherence_override: string;
   custom_rss_feeds_json: string[];
+  prompt_avoid: string;
+  prompt_prioritize: string;
+  prompt_archetypes: string;
 }
 
 const SOURCE_OPTIONS = ["news", "rss", "reddit", "hackernews"];
@@ -40,6 +43,9 @@ export default function CampaignForm({ initial, onSubmit, submitLabel, loading }
   const [cooldown, setCooldown] = useState(initial?.novelty_cooldown_days ?? 3);
   const [adherence, setAdherence] = useState(initial?.profile_adherence_override || "");
   const [customFeeds, setCustomFeeds] = useState(initial?.custom_rss_feeds_json?.join("\n") || "");
+  const [promptPrioritize, setPromptPrioritize] = useState(initial?.prompt_prioritize || "");
+  const [promptAvoid, setPromptAvoid] = useState(initial?.prompt_avoid || "");
+  const [promptArchetypes, setPromptArchetypes] = useState(initial?.prompt_archetypes || "");
   const [error, setError] = useState<string | null>(null);
 
   function toggleSource(src: string) {
@@ -74,6 +80,9 @@ export default function CampaignForm({ initial, onSubmit, submitLabel, loading }
         novelty_cooldown_days: cooldown,
         profile_adherence_override: adherence || "",
         custom_rss_feeds_json: customFeeds.split("\n").map((f) => f.trim()).filter(Boolean),
+        prompt_prioritize: promptPrioritize.trim(),
+        prompt_avoid: promptAvoid.trim(),
+        prompt_archetypes: promptArchetypes.trim(),
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save campaign");
@@ -144,6 +153,44 @@ export default function CampaignForm({ initial, onSubmit, submitLabel, loading }
               </button>
             ))}
           </div>
+        </div>
+      </Section>
+
+      {/* Campaign Instructions — campaign-scoped prompt injection */}
+      <Section title="Campaign Instructions">
+        <p className="text-xs text-gray-500 -mt-2">
+          Optional. Applied only to this campaign — layered between global guardrails and your personality profile.
+          Use Settings to edit guardrails or personality that apply across all campaigns.
+        </p>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Prioritize</label>
+          <textarea
+            value={promptPrioritize}
+            onChange={(e) => setPromptPrioritize(e.target.value)}
+            rows={3}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 resize-y"
+            placeholder="e.g. Operator anecdotes over abstract frameworks. Concrete metrics. Contrarian reframes of common takes."
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Avoid</label>
+          <textarea
+            value={promptAvoid}
+            onChange={(e) => setPromptAvoid(e.target.value)}
+            rows={3}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 resize-y"
+            placeholder="e.g. Generic LinkedIn-isms. Vague predictions. Em dashes. Hooks starting with 'I'."
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Reference Archetypes</label>
+          <textarea
+            value={promptArchetypes}
+            onChange={(e) => setPromptArchetypes(e.target.value)}
+            rows={4}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 resize-y"
+            placeholder={"Example posts to emulate in shape, length, or angle. Paste 1–3 short references with brief notes on what to lift from each."}
+          />
         </div>
       </Section>
 

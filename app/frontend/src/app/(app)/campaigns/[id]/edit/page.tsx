@@ -20,6 +20,9 @@ interface Campaign {
   novelty_cooldown_days: number;
   profile_adherence_override: string | null;
   custom_rss_feeds_json: string | null;
+  prompt_avoid: string | null;
+  prompt_prioritize: string | null;
+  prompt_archetypes: string | null;
 }
 
 export default function EditCampaignPage() {
@@ -73,6 +76,9 @@ export default function EditCampaignPage() {
     novelty_cooldown_days: campaign.novelty_cooldown_days,
     profile_adherence_override: campaign.profile_adherence_override || "",
     custom_rss_feeds_json: customFeeds,
+    prompt_avoid: campaign.prompt_avoid || "",
+    prompt_prioritize: campaign.prompt_prioritize || "",
+    prompt_archetypes: campaign.prompt_archetypes || "",
   };
 
   return (

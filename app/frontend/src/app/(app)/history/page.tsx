@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import Badge from "@/components/ui/Badge";
+import { useSetupStatus } from "@/hooks/useSetupStatus";
 
 interface DraftItem {
   id: number;
@@ -113,6 +114,21 @@ export default function HistoryPage() {
   const [lockedFeedback, setLockedFeedback] = useState<Record<number, Feedback>>({});
   const [showArchived, setShowArchived] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
+  const [viewMonth, setViewMonth] = useState<Date>(() => {
+    const n = new Date();
+    return new Date(n.getFullYear(), n.getMonth(), 1);
+  });
+  const { status: setupStatus } = useSetupStatus();
+  // Min month = the user's earliest campaign month (YYYY-MM from backend), else current month
+  const MIN_MONTH = (() => {
+    const raw = setupStatus?.earliest_campaign_month;
+    if (raw && /^\d{4}-\d{2}$/.test(raw)) {
+      const [y, m] = raw.split("-").map(Number);
+      return new Date(y, m - 1, 1);
+    }
+    const n = new Date();
+    return new Date(n.getFullYear(), n.getMonth(), 1);
+  })();
 
   async function refetchDrafts() {
     try {
@@ -304,19 +320,33 @@ export default function HistoryPage() {
       {viewMode === "calendar" && (
         <div className="rounded-xl border border-indigo-100/50 bg-white shadow-sm p-4 mb-6">
           {(() => {
+            // ISO YYYY-MM-DD key from a Date or date-string, in local time
+            const isoKey = (raw: string | null | undefined) => {
+              if (!raw || raw === "None") return "";
+              const cleaned = raw.replace(" ", "T");
+              const d = new Date(cleaned.includes("T") ? cleaned : cleaned + "T00:00:00");
+              if (Number.isNaN(d.getTime())) return "";
+              const y = d.getFullYear();
+              const m = String(d.getMonth() + 1).padStart(2, "0");
+              const dd = String(d.getDate()).padStart(2, "0");
+              return `${y}-${m}-${dd}`;
+            };
+
             const publishedPosts = drafts.filter((d) => d.status === "published" && d.published_at && d.published_at !== "None");
             const byDay: Record<string, DraftItem[]> = {};
             publishedPosts.forEach((d) => {
-              const day = fmtDate(d.published_at);
+              const day = isoKey(d.published_at);
+              if (!day) return;
               if (!byDay[day]) byDay[day] = [];
               byDay[day].push(d);
             });
 
-            // Build a 5-week calendar grid
-            const now = new Date();
-            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+            const today = new Date();
+            const year = viewMonth.getFullYear();
+            const month = viewMonth.getMonth();
+            const firstDay = new Date(year, month, 1);
             const startOffset = firstDay.getDay();
-            const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
             const weeks: (number | null)[][] = [];
             let week: (number | null)[] = Array(startOffset).fill(null);
             for (let d = 1; d <= daysInMonth; d++) {
@@ -325,21 +355,57 @@ export default function HistoryPage() {
             }
             if (week.length > 0) { while (week.length < 7) week.push(null); weeks.push(week); }
 
-            const monthLabel = now.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+            const monthLabel = viewMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+            const atMin = year === MIN_MONTH.getFullYear() && month === MIN_MONTH.getMonth();
+            const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+            const atMax = year === thisMonth.getFullYear() && month === thisMonth.getMonth();
+            const isCurrentMonth = atMax;
+            const goPrev = () => { if (!atMin) setViewMonth(new Date(year, month - 1, 1)); };
+            const goNext = () => { if (!atMax) setViewMonth(new Date(year, month + 1, 1)); };
+            const goToday = () => setViewMonth(thisMonth);
 
             return (
               <div>
-                <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-3">{monthLabel}</p>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">{monthLabel}</p>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={goPrev}
+                      disabled={atMin}
+                      title={atMin ? `${MIN_MONTH.toLocaleDateString("en-US", { month: "long", year: "numeric" })} is the earliest month` : "Previous month"}
+                      className="rounded-md border border-gray-200 px-2 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      &lt; Prev
+                    </button>
+                    <button
+                      onClick={goToday}
+                      disabled={isCurrentMonth}
+                      className="rounded-md border border-gray-200 px-2 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Today
+                    </button>
+                    <button
+                      onClick={goNext}
+                      disabled={atMax}
+                      title={atMax ? "Already at the current month" : "Next month"}
+                      className="rounded-md border border-gray-200 px-2 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Next &gt;
+                    </button>
+                  </div>
+                </div>
                 <div className="grid grid-cols-7 gap-px">
                   {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
                     <div key={d} className="text-center text-[9px] text-gray-400 font-medium py-1">{d}</div>
                   ))}
                   {weeks.flat().map((day, i) => {
                     if (day === null) return <div key={i} className="h-16 bg-gray-50/50 rounded" />;
-                    const dateStr = new Date(now.getFullYear(), now.getMonth(), day).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-                    const posts = byDay[dateStr] || [];
-                    const isToday = day === now.getDate();
-                    const color = getCampaignColor(posts[0]?.campaign_id ?? null);
+                    const yyyy = year;
+                    const mm = String(month + 1).padStart(2, "0");
+                    const dd = String(day).padStart(2, "0");
+                    const dayKey = `${yyyy}-${mm}-${dd}`;
+                    const posts = byDay[dayKey] || [];
+                    const isToday = isCurrentMonth && day === today.getDate();
 
                     return (
                       <div key={i} className={`h-16 rounded border p-1 ${isToday ? "border-violet-300 bg-violet-50/30" : "border-gray-100"} ${posts.length > 0 ? "bg-white" : "bg-gray-50/30"}`}>
