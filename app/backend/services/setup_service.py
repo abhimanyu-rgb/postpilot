@@ -27,7 +27,12 @@ def get_or_create_config(db: Session) -> IntegrationConfig:
 
 
 def get_setup_status(db: Session) -> SetupStatusResponse:
+    from app.backend.models.campaign import Campaign
+
     config = get_or_create_config(db)
+    earliest = db.query(Campaign.created_at).order_by(Campaign.created_at.asc()).first()
+    earliest_month = earliest[0].strftime("%Y-%m") if earliest and earliest[0] else None
+
     return SetupStatusResponse(
         linkedin_status=config.linkedin_status,
         slack_status=config.slack_status,
@@ -37,6 +42,8 @@ def get_setup_status(db: Session) -> SetupStatusResponse:
         timezone=config.timezone,
         daily_post_budget=config.daily_post_budget,
         min_gap_minutes=config.min_gap_minutes,
+        max_active_campaigns=config.max_active_campaigns,
+        earliest_campaign_month=earliest_month,
     )
 
 
@@ -162,6 +169,7 @@ def save_account_settings(db: Session, request: AccountSettingsRequest) -> None:
     config.timezone = request.timezone
     config.daily_post_budget = request.daily_post_budget
     config.min_gap_minutes = request.min_gap_minutes
+    config.max_active_campaigns = request.max_active_campaigns
     db.commit()
     logger.info("Account settings updated")
 

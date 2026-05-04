@@ -12,6 +12,8 @@ export interface SetupStatus {
   timezone: string | null;
   daily_post_budget: number;
   min_gap_minutes: number;
+  max_active_campaigns: number;
+  earliest_campaign_month: string | null;
 }
 
 export function useSetupStatus() {

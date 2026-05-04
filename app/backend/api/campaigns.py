@@ -21,9 +21,11 @@ def list_campaigns(
 ):
     campaigns = campaign_service.list_campaigns(db, status_filter=status)
     active_count = campaign_service.get_active_count(db)
+    max_active = campaign_service.get_max_active_campaigns(db)
     return CampaignListResponse(
         campaigns=[CampaignResponse.model_validate(c) for c in campaigns],
         active_count=active_count,
+        max_active=max_active,
     )
 
 
@@ -36,7 +38,8 @@ def create_campaign(data: CampaignCreate, db: Session = Depends(get_db)):
 @router.get("/active-count", response_model=ActiveCountResponse)
 def active_count(db: Session = Depends(get_db)):
     count = campaign_service.get_active_count(db)
-    return ActiveCountResponse(active_count=count)
+    max_active = campaign_service.get_max_active_campaigns(db)
+    return ActiveCountResponse(active_count=count, max_active=max_active)
 
 
 @router.get("/{campaign_id}", response_model=CampaignResponse)

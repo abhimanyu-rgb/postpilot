@@ -3,9 +3,12 @@ from pathlib import Path
 from pydantic_settings import BaseSettings
 
 
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
 class Settings(BaseSettings):
-    database_url: str = "sqlite:///data/app.db"
-    data_dir: str = "data"
+    database_url: str = f"sqlite:///{_REPO_ROOT / 'data' / 'app.db'}"
+    data_dir: str = str(_REPO_ROOT / "data")
     log_level: str = "INFO"
     timezone: str = "Asia/Kolkata"
     daily_post_budget: int = 1
@@ -33,6 +36,16 @@ class Settings(BaseSettings):
     @property
     def data_path(self) -> Path:
         return Path(self.data_dir).resolve()
+
+    def model_post_init(self, __context) -> None:
+        # Resolve sqlite paths relative to the repo root so the backend
+        # opens the same DB regardless of CWD (uvicorn launch dir, scripts, etc).
+        prefix = "sqlite:///"
+        if self.database_url.startswith(prefix):
+            raw = self.database_url[len(prefix):]
+            p = Path(raw)
+            if not p.is_absolute():
+                self.database_url = f"{prefix}{(_REPO_ROOT / p).resolve()}"
 
 
 settings = Settings()

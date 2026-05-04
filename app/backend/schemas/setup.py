@@ -10,6 +10,8 @@ class SetupStatusResponse(BaseModel):
     timezone: str | None = None
     daily_post_budget: int = 1
     min_gap_minutes: int = 180
+    max_active_campaigns: int = 3
+    earliest_campaign_month: str | None = None  # "YYYY-MM" of the earliest campaign created by this user
 
 
 class LinkedInSetupRequest(BaseModel):
@@ -30,6 +32,7 @@ class AccountSettingsRequest(BaseModel):
     timezone: str = Field(default="Asia/Kolkata")
     daily_post_budget: int = Field(ge=1, le=5, default=1)
     min_gap_minutes: int = Field(ge=30, le=1440, default=180)
+    max_active_campaigns: int = Field(ge=1, le=20, default=3)
 
 
 class SetupValidationResponse(BaseModel):

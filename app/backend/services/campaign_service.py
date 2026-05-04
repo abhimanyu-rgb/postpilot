@@ -6,12 +6,20 @@ from sqlalchemy.orm import Session
 
 from app.backend.core.scheduler import add_campaign_job, remove_campaign_job
 from app.backend.models.campaign import Campaign
+from app.backend.models.integration_config import IntegrationConfig
 from app.backend.schemas.campaign import CampaignCreate, CampaignUpdate
 
 logger = logging.getLogger("orchestrator")
 
-MAX_ACTIVE_CAMPAIGNS = 3
+DEFAULT_MAX_ACTIVE_CAMPAIGNS = 3
 VALID_STATUSES = {"draft", "active", "paused", "completed", "archived"}
+
+
+def get_max_active_campaigns(db: Session) -> int:
+    config = db.query(IntegrationConfig).filter(IntegrationConfig.id == 1).first()
+    if config and config.max_active_campaigns:
+        return config.max_active_campaigns
+    return DEFAULT_MAX_ACTIVE_CAMPAIGNS
 
 
 def get_active_count(db: Session) -> int:
@@ -58,6 +66,9 @@ def create_campaign(db: Session, data: CampaignCreate) -> Campaign:
         novelty_cooldown_days=data.novelty_cooldown_days,
         profile_adherence_override=data.profile_adherence_override,
         custom_rss_feeds_json=json.dumps(data.custom_rss_feeds_json) if data.custom_rss_feeds_json else None,
+        prompt_avoid=data.prompt_avoid or None,
+        prompt_prioritize=data.prompt_prioritize or None,
+        prompt_archetypes=data.prompt_archetypes or None,
     )
     db.add(campaign)
     db.commit()
@@ -99,11 +110,12 @@ def activate_campaign(db: Session, campaign_id: int) -> Campaign:
         raise HTTPException(status_code=409, detail="Cannot activate an archived campaign")
 
     active_count = get_active_count(db)
-    if active_count >= MAX_ACTIVE_CAMPAIGNS:
+    max_active = get_max_active_campaigns(db)
+    if active_count >= max_active:
         raise HTTPException(
             status_code=409,
-            detail=f"Maximum {MAX_ACTIVE_CAMPAIGNS} active campaigns allowed. "
-            "Pause or archive an existing campaign first.",
+            detail=f"Maximum {max_active} active campaigns allowed. "
+            "Pause or archive an existing campaign first, or raise the limit in Settings.",
         )
 
     _validate_for_activation(campaign)
