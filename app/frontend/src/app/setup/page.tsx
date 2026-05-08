@@ -30,6 +30,7 @@ export default function SetupPage() {
   const [timezone, setTimezone] = useState("Asia/Kolkata");
   const [dailyBudget, setDailyBudget] = useState(1);
   const [minGap, setMinGap] = useState(180);
+  const [linkedinHandle, setLinkedinHandle] = useState("");
   const [settingsSaved, setSettingsSaved] = useState(false);
 
   // Check for OAuth callback params
@@ -81,6 +82,7 @@ export default function SetupPage() {
         timezone,
         daily_post_budget: dailyBudget,
         min_gap_minutes: minGap,
+        linkedin_profile_handle: linkedinHandle.trim() || null,
       });
       setSettingsSaved(true);
       await refresh();
@@ -295,6 +297,17 @@ NEWS_API_KEY=...  # optional, falls back to free RSS`}</pre>
                     <option value={360}>6 hours</option>
                   </select>
                 </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">LinkedIn Profile Handle <span className="text-gray-400 font-normal">(optional)</span></label>
+                <input
+                  type="text"
+                  value={linkedinHandle}
+                  onChange={(e) => setLinkedinHandle(e.target.value)}
+                  placeholder="e.g. yourname"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                />
+                <p className="text-[11px] text-gray-400 mt-1">The <span className="font-mono">{`<handle>`}</span> in <span className="font-mono">linkedin.com/in/&lt;handle&gt;</span>. Used by Analytics for weekly engagement scraping. You can set this later in Settings.</p>
               </div>
               {settingsSaved ? (
                 <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-center animate-scale-in">

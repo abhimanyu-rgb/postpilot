@@ -43,6 +43,7 @@ def get_setup_status(db: Session) -> SetupStatusResponse:
         daily_post_budget=config.daily_post_budget,
         min_gap_minutes=config.min_gap_minutes,
         max_active_campaigns=config.max_active_campaigns,
+        linkedin_profile_handle=config.linkedin_profile_handle,
         earliest_campaign_month=earliest_month,
     )
 
@@ -170,6 +171,14 @@ def save_account_settings(db: Session, request: AccountSettingsRequest) -> None:
     config.daily_post_budget = request.daily_post_budget
     config.min_gap_minutes = request.min_gap_minutes
     config.max_active_campaigns = request.max_active_campaigns
+    if request.linkedin_profile_handle is not None:
+        # Strip leading/trailing whitespace and any URL prefix the user may paste in.
+        h = request.linkedin_profile_handle.strip()
+        for prefix in ("https://www.linkedin.com/in/", "https://linkedin.com/in/", "https://in.linkedin.com/in/", "linkedin.com/in/"):
+            if h.startswith(prefix):
+                h = h[len(prefix):]
+        h = h.rstrip("/").split("?")[0]
+        config.linkedin_profile_handle = h or None
     db.commit()
     logger.info("Account settings updated")
 

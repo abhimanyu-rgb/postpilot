@@ -19,6 +19,7 @@ class IntegrationConfig(Base, IdMixin, FullTimestampMixin):
     daily_post_budget: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     min_gap_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=180)
     max_active_campaigns: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    linkedin_profile_handle: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # User-editable personality profile
     author_name: Mapped[str | None] = mapped_column(Text, nullable=True)

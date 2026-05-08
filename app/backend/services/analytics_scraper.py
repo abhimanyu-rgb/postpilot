@@ -40,7 +40,7 @@ _EXTRACTION_JS = """
   const cards = document.querySelectorAll('.profile-activity-card');
   const out = [];
   cards.forEach(card => {
-    const ownLink = card.querySelector('a[href*="abhimanyushekhawat_"][href*="activity-"]');
+    const ownLink = card.querySelector('a[href*="__HANDLE___"][href*="activity-"]');
     if (!ownLink) return;
     const m = ownLink.href.match(/activity-(\\d+)/);
     if (!m) return;
@@ -73,14 +73,14 @@ _EXTRACTION_JS = """
 def _build_extraction_js(handle: str) -> str:
     """Substitute the user's LinkedIn handle into the extraction selector."""
     safe_handle = handle.replace("'", "").replace('"', "").replace("\\", "")
-    return _EXTRACTION_JS.replace("abhimanyushekhawat_", f"{safe_handle}_")
+    return _EXTRACTION_JS.replace("__HANDLE__", safe_handle)
 
 
 def scrape_profile_posts(handle: str, profile_url: str | None = None, timeout_ms: int = 30000) -> list[ScrapedPost]:
     """Open the LinkedIn public profile, dismiss the sign-in modal, extract posts.
 
-    handle: the LinkedIn vanity name (e.g., "abhimanyushekhawat") — used to
-        scope the extractor to user-authored links and avoid related-post noise.
+    handle: the LinkedIn vanity name (the `<handle>` in linkedin.com/in/<handle>) —
+        used to scope the extractor to user-authored links and avoid related-post noise.
     profile_url: full URL to load. Defaults to https://in.linkedin.com/in/<handle>.
     """
     from playwright.sync_api import sync_playwright

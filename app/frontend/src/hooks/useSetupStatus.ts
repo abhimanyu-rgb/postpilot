@@ -13,6 +13,7 @@ export interface SetupStatus {
   daily_post_budget: number;
   min_gap_minutes: number;
   max_active_campaigns: number;
+  linkedin_profile_handle: string | null;
   earliest_campaign_month: string | null;
 }
 

@@ -47,11 +47,20 @@ class RefreshResult(TypedDict):
 
 
 def _get_linkedin_handle() -> str | None:
-    """Vanity handle for the public profile URL (e.g., "abhimanyushekhawat").
+    """Vanity handle for the public profile URL — the `<handle>` in linkedin.com/in/<handle>.
 
-    LinkedIn's public-profile URL uses the vanity name rather than the URN.
-    Read it from the LINKEDIN_PROFILE_HANDLE env var.
+    Resolution order: integration_config row (user-configurable in Settings) →
+    LINKEDIN_PROFILE_HANDLE env var (legacy / deployment override).
     """
+    from app.backend.core.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        config = db.query(IntegrationConfig).filter(IntegrationConfig.id == 1).first()
+        if config and config.linkedin_profile_handle:
+            return config.linkedin_profile_handle.strip() or None
+    finally:
+        db.close()
     return (get_secret("LINKEDIN_PROFILE_HANDLE") or settings.linkedin_profile_handle).strip() or None
 
 

@@ -32,6 +32,7 @@ export default function SettingsPage() {
   const [dailyBudget, setDailyBudget] = useState(1);
   const [minGap, setMinGap] = useState(180);
   const [maxActiveCampaigns, setMaxActiveCampaigns] = useState(3);
+  const [linkedinHandle, setLinkedinHandle] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [editingPrefs, setEditingPrefs] = useState(false);
@@ -55,14 +56,14 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (status) {
-      setTimezone(status.timezone || "UTC"); setDailyBudget(status.daily_post_budget); setMinGap(status.min_gap_minutes); setMaxActiveCampaigns(status.max_active_campaigns ?? 3);
+      setTimezone(status.timezone || "UTC"); setDailyBudget(status.daily_post_budget); setMinGap(status.min_gap_minutes); setMaxActiveCampaigns(status.max_active_campaigns ?? 3); setLinkedinHandle(status.linkedin_profile_handle || "");
       setEditingPrefs(!status.setup_complete);
     }
   }, [status]);
 
   async function handleSaveSettings(e: FormEvent) {
     e.preventDefault(); setSaving(true); setError(null); setSaved(false);
-    try { await api.put("/api/setup/settings", { timezone, daily_post_budget: dailyBudget, min_gap_minutes: minGap, max_active_campaigns: maxActiveCampaigns }); setSaved(true); setEditingPrefs(false); refresh(); setTimeout(() => setSaved(false), 3000); }
+    try { await api.put("/api/setup/settings", { timezone, daily_post_budget: dailyBudget, min_gap_minutes: minGap, max_active_campaigns: maxActiveCampaigns, linkedin_profile_handle: linkedinHandle.trim() || null }); setSaved(true); setEditingPrefs(false); refresh(); setTimeout(() => setSaved(false), 3000); }
     catch (e) { setError(e instanceof Error ? e.message : "Failed"); } finally { setSaving(false); }
   }
 
@@ -173,6 +174,17 @@ export default function SettingsPage() {
                 </select>
                 <p className="text-[9px] text-gray-400 mt-1">Cap on campaigns in active status at once. Raise to run more in parallel.</p>
               </div>
+              <div>
+                <label className="text-[10px] text-gray-500 uppercase tracking-wide font-semibold block mb-1">LinkedIn Profile Handle</label>
+                <input
+                  type="text"
+                  value={linkedinHandle}
+                  onChange={(e) => setLinkedinHandle(e.target.value)}
+                  placeholder="e.g. yourname or paste your full profile URL"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-xs focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20"
+                />
+                <p className="text-[9px] text-gray-400 mt-1">The <span className="font-mono">{`<handle>`}</span> in <span className="font-mono">linkedin.com/in/&lt;handle&gt;</span>. Used by Analytics to scrape weekly engagement on your posts.</p>
+              </div>
               <div className="flex items-center gap-2">
                 <button type="submit" disabled={saving}
                   className="rounded-lg bg-gradient-to-r from-indigo-500 to-violet-600 px-3.5 py-1.5 text-xs font-medium text-white hover:from-indigo-600 hover:to-violet-700 disabled:opacity-50 shadow-sm">
@@ -188,6 +200,7 @@ export default function SettingsPage() {
                 <div><p className="text-[10px] text-gray-400">Budget</p><p className="text-xs font-medium text-gray-700">{dailyBudget}/day</p></div>
                 <div><p className="text-[10px] text-gray-400">Min Gap</p><p className="text-xs font-medium text-gray-700">{minGap}m</p></div>
                 <div><p className="text-[10px] text-gray-400">Max Active Campaigns</p><p className="text-xs font-medium text-gray-700">{maxActiveCampaigns}</p></div>
+                <div className="col-span-2"><p className="text-[10px] text-gray-400">LinkedIn Profile Handle</p><p className="text-xs font-medium text-gray-700 font-mono">{linkedinHandle ? `linkedin.com/in/${linkedinHandle}` : <span className="text-rose-500 not-italic font-sans">Not set — Analytics won&rsquo;t work</span>}</p></div>
               </div>
               {saved && <p className="text-[10px] text-emerald-600 mt-2 animate-fade-in">Saved</p>}
             </div>
