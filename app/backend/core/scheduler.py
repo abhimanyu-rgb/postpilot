@@ -270,7 +270,33 @@ def start_scheduler() -> None:
     )
     logger.info("Scheduled publish queue processor (every 30 min)")
 
+    # Weekly analytics refresh: Saturday 09:00 in user's timezone.
+    # 24h misfire grace so a Saturday-laptop-off doesn't lose the run if the
+    # user opens their laptop sometime that weekend.
+    scheduler.add_job(
+        process_weekly_analytics,
+        trigger=CronTrigger(day_of_week="sat", hour=9, minute=0, timezone=settings.timezone),
+        id="weekly_analytics_refresh",
+        replace_existing=True,
+        misfire_grace_time=86400,
+    )
+    logger.info("Scheduled weekly analytics refresh (Saturday 09:00 %s)", settings.timezone)
+
     scheduler.start()
+
+
+def process_weekly_analytics() -> None:
+    """Saturday cron: refresh engagement for posts in the X-14..X-7 window."""
+    from app.backend.services.analytics_service import refresh_analytics
+
+    db = SessionLocal()
+    try:
+        result = refresh_analytics(db)
+        logger.info("Weekly analytics refresh result: %s", result)
+    except Exception as e:
+        logger.error("Weekly analytics refresh failed: %s", e)
+    finally:
+        db.close()
 
 
 def add_campaign_job(campaign_id: int) -> None:

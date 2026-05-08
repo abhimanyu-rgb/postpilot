@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     linkedin_access_token: str = ""
     linkedin_refresh_token: str = ""
     linkedin_person_urn: str = ""
+    linkedin_profile_handle: str = ""  # Vanity name used in public profile URL (e.g., "abhimanyushekhawat")
 
     slack_webhook_url: str = ""
 

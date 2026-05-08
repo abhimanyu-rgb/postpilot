@@ -15,6 +15,7 @@ class PublishedPost(Base, IdMixin, FullTimestampMixin):
     published_text: Mapped[str] = mapped_column(Text, nullable=False)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     external_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+    activity_urn: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String, nullable=False)
     manual_confirmation_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
