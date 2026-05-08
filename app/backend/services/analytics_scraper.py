@@ -1,8 +1,10 @@
 """Headless Playwright scraper for LinkedIn public profile post engagement.
 
-Loads `https://in.linkedin.com/in/<handle>`, dismisses the sign-in modal, and
-extracts user-authored posts visible in the public profile carousel: each
-post's activity URN, reaction count, comment count, and relative posted-at.
+Loads `https://in.linkedin.com/in/<handle>` (the public profile carousel).
+Exposes total reactions per post, the activity URN, and the relative posted-at
+timestamp. Comments and reposts are not exposed publicly so they are returned
+as null. Authenticated scraping was attempted earlier and abandoned —
+LinkedIn's anti-bot blocks the cookie path quickly from a single IP.
 
 Designed to run from the backend scheduler (no MCP, no interactive browser).
 The DOM extraction script and matching algorithm were validated interactively
@@ -15,10 +17,9 @@ from typing import TypedDict
 
 logger = logging.getLogger("orchestrator")
 
-# Tuned from observed data:
+# URN matching: see analytics_service for the math.
 #   activity-vs-share offset: ~10^8 to ~10^9
 #   share-vs-prior-share gap: ~10^14
-# 10^11 sits cleanly in between.
 URN_MATCH_THRESHOLD = 10**11
 
 
@@ -76,8 +77,12 @@ def _build_extraction_js(handle: str) -> str:
     return _EXTRACTION_JS.replace("__HANDLE__", safe_handle)
 
 
-def scrape_profile_posts(handle: str, profile_url: str | None = None, timeout_ms: int = 30000) -> list[ScrapedPost]:
-    """Open the LinkedIn public profile, dismiss the sign-in modal, extract posts.
+def scrape_profile_posts(
+    handle: str,
+    profile_url: str | None = None,
+    timeout_ms: int = 30000,
+) -> list[ScrapedPost]:
+    """Open the LinkedIn public profile and extract user-authored posts.
 
     handle: the LinkedIn vanity name (the `<handle>` in linkedin.com/in/<handle>) —
         used to scope the extractor to user-authored links and avoid related-post noise.
@@ -103,9 +108,6 @@ def scrape_profile_posts(handle: str, profile_url: str | None = None, timeout_ms
             page = context.new_page()
             page.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
 
-            # Wait for at least one user-authored post link to appear. The
-            # sign-in modal is in the DOM but doesn't block extraction, so we
-            # don't need to dismiss it for the scrape to work.
             # state="attached" because the sign-in modal overlays the page and
             # would make matched elements appear "not visible" to Playwright's
             # default visibility check, even though they're in the DOM.
@@ -120,8 +122,7 @@ def scrape_profile_posts(handle: str, profile_url: str | None = None, timeout_ms
                 return []
 
             # Give the page a moment to finish hydration so all carousel slides
-            # are present in the DOM. Empirically the carousel ships ~25 links
-            # within a couple of seconds of initial paint.
+            # are present in the DOM.
             page.wait_for_timeout(1500)
 
             posts = page.evaluate(_build_extraction_js(handle))

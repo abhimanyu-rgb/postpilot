@@ -1,7 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+
+// Fragment is keyable but TS infers props loosely; this alias is just for readability.
+const FragmentWithKey = Fragment;
 
 interface ManualFeedback {
   performance_rating: string | null;
@@ -44,22 +47,84 @@ interface RefreshResult {
   skipped_already_scraped_today: number;
 }
 
-function formatDate(iso: string | null): string {
+function formatDateShort(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function formatDateTime(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-function staleness(lastIso: string | null): { days: number; label: string; tone: "fresh" | "stale" | "very-stale" | "none" } {
-  if (!lastIso) return { days: -1, label: "Never refreshed", tone: "none" };
+// Mon-Sun week. Returns { start, end, key } for a given date.
+function isoWeekBounds(d: Date): { start: Date; end: Date; key: string } {
+  const day = d.getDay(); // 0=Sun..6=Sat
+  const diffToMon = (day + 6) % 7; // Mon=0, Tue=1, ..., Sun=6
+  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate() - diffToMon);
+  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
+  const yyyy = start.getFullYear();
+  const mm = String(start.getMonth() + 1).padStart(2, "0");
+  const dd = String(start.getDate()).padStart(2, "0");
+  return { start, end, key: `${yyyy}-${mm}-${dd}` };
+}
+
+function shortIdentifier(text: string): string {
+  // Take the first non-empty line, trim, and cap at 80 chars.
+  const firstLine = text.split(/\n/).map((l) => l.trim()).find((l) => l.length > 0) ?? "";
+  return firstLine.length > 80 ? firstLine.slice(0, 77) + "…" : firstLine;
+}
+
+function staleness(lastIso: string | null): { label: string; tone: "fresh" | "stale" | "very-stale" | "none" } {
+  if (!lastIso) return { label: "Never refreshed", tone: "none" };
   const then = new Date(lastIso).getTime();
-  if (Number.isNaN(then)) return { days: -1, label: "Never refreshed", tone: "none" };
+  if (Number.isNaN(then)) return { label: "Never refreshed", tone: "none" };
   const days = Math.floor((Date.now() - then) / 86400000);
-  if (days < 1) return { days, label: "Updated today", tone: "fresh" };
-  if (days < 7) return { days, label: `Updated ${days}d ago`, tone: "fresh" };
-  if (days < 14) return { days, label: `Updated ${days}d ago — may be stale`, tone: "stale" };
-  return { days, label: `Updated ${days}d ago — likely stale`, tone: "very-stale" };
+  if (days < 1) return { label: "Updated today", tone: "fresh" };
+  if (days < 7) return { label: `Updated ${days}d ago`, tone: "fresh" };
+  if (days < 14) return { label: `Updated ${days}d ago — may be stale`, tone: "stale" };
+  return { label: `Updated ${days}d ago — likely stale`, tone: "very-stale" };
+}
+
+interface WeekGroup {
+  key: string;
+  start: Date;
+  end: Date;
+  posts: AnalyticsRow[];
+  totalReactions: number;
+}
+
+function groupByWeek(posts: AnalyticsRow[]): WeekGroup[] {
+  const buckets = new Map<string, WeekGroup>();
+  for (const p of posts) {
+    const ref = p.published_at || p.scraped_at;
+    if (!ref) continue;
+    const d = new Date(ref);
+    if (Number.isNaN(d.getTime())) continue;
+    const { start, end, key } = isoWeekBounds(d);
+    let g = buckets.get(key);
+    if (!g) {
+      g = { key, start, end, posts: [], totalReactions: 0 };
+      buckets.set(key, g);
+    }
+    g.posts.push(p);
+    g.totalReactions += p.reactions ?? 0;
+  }
+  // Sort weeks newest first; posts within a week newest first.
+  const out = Array.from(buckets.values());
+  out.sort((a, b) => b.start.getTime() - a.start.getTime());
+  for (const g of out) {
+    g.posts.sort((a, b) => {
+      const aT = a.published_at ? new Date(a.published_at).getTime() : 0;
+      const bT = b.published_at ? new Date(b.published_at).getTime() : 0;
+      return bT - aT;
+    });
+  }
+  return out;
 }
 
 export default function AnalyticsPage() {
@@ -70,6 +135,7 @@ export default function AnalyticsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshResult, setRefreshResult] = useState<RefreshResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set());
 
   async function load() {
     setLoading(true);
@@ -122,11 +188,22 @@ export default function AnalyticsPage() {
     }
   }
 
-  const stale = staleness(lastRefresh);
-  const staleClass = stale.tone === "very-stale" ? "text-rose-600" : stale.tone === "stale" ? "text-amber-600" : stale.tone === "none" ? "text-gray-400" : "text-emerald-600";
+  function toggleWeek(key: string) {
+    setExpandedWeeks((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
-  // Sort posts by score desc for the table
-  const sortedPosts = [...posts].sort((a, b) => (b.engagement_score ?? 0) - (a.engagement_score ?? 0));
+  const stale = staleness(lastRefresh);
+  const staleClass =
+    stale.tone === "very-stale" ? "text-rose-600" :
+    stale.tone === "stale" ? "text-amber-600" :
+    stale.tone === "none" ? "text-gray-400" : "text-emerald-600";
+
+  const weeks = groupByWeek(posts);
 
   return (
     <div className="p-6 max-w-[1100px]">
@@ -159,7 +236,7 @@ export default function AnalyticsPage() {
         <div className="mt-4 rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-xs text-rose-700">{error}</div>
       )}
 
-      {/* Staged insights — show first because they need user action */}
+      {/* Staged insights */}
       {insights.length > 0 && (
         <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50/30 p-4">
           <h2 className="text-xs font-semibold text-amber-800 uppercase tracking-wide mb-2">
@@ -180,16 +257,10 @@ export default function AnalyticsPage() {
                   </details>
                 )}
                 <div className="flex gap-2 mt-3">
-                  <button
-                    onClick={() => handlePromote(ins.id)}
-                    className="rounded-md bg-emerald-600 px-3 py-1 text-[11px] font-medium text-white hover:bg-emerald-700"
-                  >
+                  <button onClick={() => handlePromote(ins.id)} className="rounded-md bg-emerald-600 px-3 py-1 text-[11px] font-medium text-white hover:bg-emerald-700">
                     Add to learned context
                   </button>
-                  <button
-                    onClick={() => handleReject(ins.id)}
-                    className="rounded-md border border-gray-200 px-3 py-1 text-[11px] font-medium text-gray-500 hover:bg-gray-50"
-                  >
+                  <button onClick={() => handleReject(ins.id)} className="rounded-md border border-gray-200 px-3 py-1 text-[11px] font-medium text-gray-500 hover:bg-gray-50">
                     Dismiss
                   </button>
                 </div>
@@ -199,14 +270,15 @@ export default function AnalyticsPage() {
         </div>
       )}
 
-      {/* Engagement table */}
+      {/* Week-grouped table */}
       <div className="mt-6 rounded-xl border border-indigo-100/50 bg-white shadow-sm overflow-hidden">
-        <div className="px-4 py-3 border-b border-indigo-50">
-          <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Posts ({sortedPosts.length})</h2>
+        <div className="px-4 py-3 border-b border-indigo-50 flex items-center justify-between">
+          <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">By week</h2>
+          <span className="text-[10px] text-gray-400">{posts.length} post{posts.length === 1 ? "" : "s"} across {weeks.length} week{weeks.length === 1 ? "" : "s"}</span>
         </div>
         {loading ? (
           <div className="p-6 text-xs text-gray-400">Loading...</div>
-        ) : sortedPosts.length === 0 ? (
+        ) : weeks.length === 0 ? (
           <div className="p-8 text-center">
             <p className="text-sm text-gray-500 mb-1">No analytics yet</p>
             <p className="text-[11px] text-gray-400">
@@ -214,38 +286,62 @@ export default function AnalyticsPage() {
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-indigo-50/60">
-            {sortedPosts.map((row) => (
-              <div key={row.draft_id} className="p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-900 line-clamp-3 whitespace-pre-wrap">{row.primary_text_first_200}</p>
-                    <div className="flex items-center gap-3 mt-2 text-[10px] text-gray-400">
-                      <span>Published {formatDate(row.published_at)}</span>
-                      <span>·</span>
-                      <span>Scraped {formatDate(row.scraped_at)}</span>
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-2xl font-bold text-indigo-600 leading-none">{row.engagement_score ?? "—"}</p>
-                    <p className="text-[10px] text-gray-400 mt-1">score</p>
-                    <p className="text-[10px] text-gray-500 mt-1.5">{row.reactions ?? 0} reactions</p>
-                  </div>
-                </div>
-                {row.manual_feedback && (
-                  <div className="mt-2.5 rounded-md bg-violet-50/40 border border-violet-100 px-2.5 py-1.5">
-                    <p className="text-[10px] text-violet-700 font-semibold uppercase tracking-wide">Your manual feedback</p>
-                    {row.manual_feedback.performance_rating && (
-                      <p className="text-[11px] text-gray-700 mt-0.5">Rating: {row.manual_feedback.performance_rating}</p>
-                    )}
-                    {row.manual_feedback.what_worked && (
-                      <p className="text-[11px] text-gray-600 mt-0.5"><span className="font-medium">Worked:</span> {row.manual_feedback.what_worked}</p>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+          <table className="w-full text-xs">
+            <thead className="bg-gray-50/50">
+              <tr className="border-b border-gray-100">
+                <th className="text-left font-medium text-gray-500 px-4 py-2 w-10"></th>
+                <th className="text-left font-medium text-gray-500 px-2 py-2">Week</th>
+                <th className="text-left font-medium text-gray-500 px-2 py-2">Posts</th>
+                <th className="text-right font-medium text-gray-500 px-4 py-2 w-24">Reactions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {weeks.map((wk) => {
+                const expanded = expandedWeeks.has(wk.key);
+                return (
+                  <FragmentWithKey key={wk.key}>
+                    <tr onClick={() => toggleWeek(wk.key)} className="border-b border-gray-50 hover:bg-indigo-50/20 cursor-pointer">
+                      <td className="px-4 py-2.5 text-gray-400">
+                        <svg className={`w-3 h-3 transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                        </svg>
+                      </td>
+                      <td className="px-2 py-2.5 text-gray-700 font-medium">
+                        {formatDateShort(wk.start.toISOString())} – {formatDateShort(wk.end.toISOString())}
+                      </td>
+                      <td className="px-2 py-2.5 text-gray-500">
+                        {wk.posts.length} post{wk.posts.length === 1 ? "" : "s"}
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        <span className="text-sm font-semibold text-indigo-600">{wk.totalReactions}</span>
+                      </td>
+                    </tr>
+                    {expanded && wk.posts.map((p) => (
+                      <tr key={`${wk.key}-${p.draft_id}`} className="border-b border-gray-50 bg-gray-50/20">
+                        <td className="px-4 py-2"></td>
+                        <td className="px-2 py-2 text-gray-400 text-[11px]">{formatDateShort(p.published_at)}</td>
+                        <td className="px-2 py-2">
+                          <p className="text-gray-800 leading-snug">{shortIdentifier(p.primary_text_first_200)}</p>
+                          {p.manual_feedback && (
+                            <div className="mt-1 inline-flex items-center gap-1.5 rounded bg-violet-50 border border-violet-100 px-1.5 py-0.5">
+                              <span className="text-[9px] text-violet-700 font-semibold uppercase tracking-wide">Manual feedback</span>
+                              {p.manual_feedback.performance_rating && (
+                                <span className="text-[10px] text-gray-600">{p.manual_feedback.performance_rating}</span>
+                              )}
+                            </div>
+                          )}
+                          <p className="text-[10px] text-gray-400 mt-0.5">Scraped {formatDateTime(p.scraped_at)}</p>
+                        </td>
+                        <td className="px-4 py-2 text-right">
+                          <span className="text-gray-700">{p.reactions ?? 0}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </FragmentWithKey>
+                );
+              })}
+            </tbody>
+          </table>
         )}
       </div>
     </div>
