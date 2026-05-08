@@ -106,6 +106,9 @@ pip install -e ".[dev]"
 
 ### 3. Initialize database
 
+The local SQLite DB at `data/app.db` is gitignored, so a fresh clone has no DB
+yet. Run migrations to create the schema:
+
 ```bash
 alembic upgrade head
 ```

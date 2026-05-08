@@ -14,6 +14,9 @@ personality-profile.md
 
 # Data (local runtime data, not committed)
 data/
+*.db
+*.sqlite
+*.sqlite3
 
 # Node / Next.js
 app/frontend/node_modules/
