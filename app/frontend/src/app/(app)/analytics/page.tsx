@@ -22,10 +22,20 @@ interface AnalyticsRow {
   engagement_score: number | null;
   activity_urn: string | null;
   manual_feedback: ManualFeedback | null;
+  is_top_quartile: boolean;
+  has_promoted_insight: boolean;
+}
+
+interface ThresholdBasis {
+  quartile: number;
+  lookback_days: number;
+  min_snapshots_required: number;
 }
 
 interface PostsResponse {
   posts: AnalyticsRow[];
+  threshold: number | null;
+  threshold_basis: ThresholdBasis;
   last_refresh: string | null;
 }
 
@@ -130,6 +140,8 @@ function groupByWeek(posts: AnalyticsRow[]): WeekGroup[] {
 export default function AnalyticsPage() {
   const [posts, setPosts] = useState<AnalyticsRow[]>([]);
   const [lastRefresh, setLastRefresh] = useState<string | null>(null);
+  const [threshold, setThreshold] = useState<number | null>(null);
+  const [thresholdBasis, setThresholdBasis] = useState<ThresholdBasis | null>(null);
   const [insights, setInsights] = useState<StagedInsight[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -143,6 +155,8 @@ export default function AnalyticsPage() {
       const p = await api.get<PostsResponse>("/api/analytics/posts");
       setPosts(p.posts);
       setLastRefresh(p.last_refresh);
+      setThreshold(p.threshold);
+      setThresholdBasis(p.threshold_basis);
       const i = await api.get<StagedInsight[]>("/api/analytics/insights/staged");
       setInsights(i);
     } catch (e) {
@@ -236,6 +250,22 @@ export default function AnalyticsPage() {
         <div className="mt-4 rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-xs text-rose-700">{error}</div>
       )}
 
+      {/* Marker legend — explain what the badges mean */}
+      <div className="mt-4 rounded-lg border border-indigo-100/60 bg-indigo-50/30 px-3 py-2 flex items-center gap-4 flex-wrap">
+        <span className="inline-flex items-center gap-1.5 text-[11px] text-gray-700">
+          <span className="rounded px-1.5 py-0.5 bg-amber-100 text-amber-800 font-semibold text-[9px] uppercase tracking-wide">Top quartile</span>
+          {threshold !== null ? (
+            <span className="text-gray-500">≥ {threshold.toFixed(0)} score · top {Math.round((1 - (thresholdBasis?.quartile ?? 0.75)) * 100)}% over last {thresholdBasis?.lookback_days ?? 90}d</span>
+          ) : (
+            <span className="text-gray-400 italic">not yet — needs {thresholdBasis?.min_snapshots_required ?? 4}+ snapshots ({posts.length} so far)</span>
+          )}
+        </span>
+        <span className="inline-flex items-center gap-1.5 text-[11px] text-gray-700">
+          <span className="rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-800 font-semibold text-[9px] uppercase tracking-wide">Insight applied</span>
+          <span className="text-gray-500">an insight from this post is now in your <a href="/settings" className="underline hover:text-indigo-700">learned context</a> and shapes new drafts</span>
+        </span>
+      </div>
+
       {/* Staged insights */}
       {insights.length > 0 && (
         <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50/30 p-4">
@@ -322,14 +352,26 @@ export default function AnalyticsPage() {
                         <td className="px-2 py-2 text-gray-400 text-[11px]">{formatDateShort(p.published_at)}</td>
                         <td className="px-2 py-2">
                           <p className="text-gray-800 leading-snug">{shortIdentifier(p.primary_text_first_200)}</p>
-                          {p.manual_feedback && (
-                            <div className="mt-1 inline-flex items-center gap-1.5 rounded bg-violet-50 border border-violet-100 px-1.5 py-0.5">
-                              <span className="text-[9px] text-violet-700 font-semibold uppercase tracking-wide">Manual feedback</span>
-                              {p.manual_feedback.performance_rating && (
-                                <span className="text-[10px] text-gray-600">{p.manual_feedback.performance_rating}</span>
-                              )}
-                            </div>
-                          )}
+                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                            {p.is_top_quartile && (
+                              <span className="inline-flex items-center rounded bg-amber-100 border border-amber-200 px-1.5 py-0.5 text-[9px] font-semibold text-amber-800 uppercase tracking-wide" title="Engagement score is in the top quartile of your last 90 days">
+                                Top quartile
+                              </span>
+                            )}
+                            {p.has_promoted_insight && (
+                              <span className="inline-flex items-center rounded bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-800 uppercase tracking-wide" title="An insight extracted from this post is in your learned context, shaping new drafts">
+                                Insight applied
+                              </span>
+                            )}
+                            {p.manual_feedback && (
+                              <span className="inline-flex items-center gap-1 rounded bg-violet-100 border border-violet-200 px-1.5 py-0.5">
+                                <span className="text-[9px] text-violet-800 font-semibold uppercase tracking-wide">Manual feedback</span>
+                                {p.manual_feedback.performance_rating && (
+                                  <span className="text-[10px] text-gray-700">{p.manual_feedback.performance_rating}</span>
+                                )}
+                              </span>
+                            )}
+                          </div>
                           <p className="text-[10px] text-gray-400 mt-0.5">Scraped {formatDateTime(p.scraped_at)}</p>
                         </td>
                         <td className="px-4 py-2 text-right">

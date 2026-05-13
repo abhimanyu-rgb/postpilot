@@ -379,8 +379,15 @@ def reject_insight(db: Session, insight_id: int) -> dict:
     return {"id": insight.id, "status": "rejected"}
 
 
-def list_analytics_with_drafts(db: Session, limit: int = 50) -> list[dict]:
-    """Return recent analytics rows joined with draft info for the Analytics tab."""
+def list_analytics_with_drafts(db: Session, limit: int = 50) -> dict:
+    """Return analytics rows + the current high-engagement threshold.
+
+    Each row includes two markers:
+    - is_top_quartile: engagement_score >= the 75th-percentile threshold computed
+      from the last 90 days of snapshots. None when <4 snapshots.
+    - has_promoted_insight: true if any staged_insight for this draft has status=promoted
+      (meaning an insight extracted from this post is already shaping future drafts).
+    """
     rows = (
         db.query(PostAnalytics, Draft, PublishedPost)
         .join(Draft, Draft.id == PostAnalytics.draft_id)
@@ -389,25 +396,51 @@ def list_analytics_with_drafts(db: Session, limit: int = 50) -> list[dict]:
         .limit(limit)
         .all()
     )
-    out = []
+
+    threshold = _high_engagement_threshold(db)
+
+    # Pre-fetch promoted-insight draft ids in one query
+    promoted_draft_ids = {
+        row[0]
+        for row in db.query(StagedInsight.draft_id)
+        .filter(StagedInsight.status == "promoted")
+        .filter(StagedInsight.draft_id.isnot(None))
+        .all()
+    }
+
+    posts = []
     seen_drafts: set[int] = set()  # one row per draft (latest snapshot)
     for analytics, draft, pp in rows:
         if draft.id in seen_drafts:
             continue
         seen_drafts.add(draft.id)
         manual_fb = _fetch_manual_feedback(db, draft.id)
-        out.append({
+        score = analytics.engagement_score
+        is_top = (
+            score is not None and threshold is not None and score >= threshold
+        )
+        posts.append({
             "draft_id": draft.id,
             "scraped_at": analytics.scraped_at.isoformat(),
             "published_at": pp.published_at.isoformat() if pp.published_at else None,
             "primary_text_first_200": (draft.primary_text or "")[:200],
             "reactions": analytics.reactions,
             "comments": analytics.comments,
-            "engagement_score": analytics.engagement_score,
+            "engagement_score": score,
             "activity_urn": analytics.activity_urn,
             "manual_feedback": manual_fb,
+            "is_top_quartile": is_top,
+            "has_promoted_insight": draft.id in promoted_draft_ids,
         })
-    return out
+    return {
+        "posts": posts,
+        "threshold": threshold,
+        "threshold_basis": {
+            "quartile": INSIGHT_QUARTILE,
+            "lookback_days": LOOKBACK_DAYS_FOR_QUARTILE,
+            "min_snapshots_required": 4,
+        },
+    }
 
 
 def list_pending_insights(db: Session) -> list[dict]:

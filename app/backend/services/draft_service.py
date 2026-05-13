@@ -52,6 +52,7 @@ def _build_campaign_instructions_section(campaign: Campaign) -> str:
 def _build_draft_system_prompt(campaign: Campaign, feedback_context: str = "") -> str:
     from app.backend.services.personality_service import (
         get_content_guardrails,
+        get_learned_context,
         get_personality_prompt,
     )
 
@@ -59,6 +60,11 @@ def _build_draft_system_prompt(campaign: Campaign, feedback_context: str = "") -
     feedback_section = f"\n{feedback_context}\n" if feedback_context else ""
     guardrails = get_content_guardrails()
     personality = get_personality_prompt()
+    learned = get_learned_context()
+    learned_section = (
+        f"\n## Learned from Past Performance (automated, from engagement analytics)\n{learned}\n"
+        if learned else ""
+    )
     campaign_instructions = _build_campaign_instructions_section(campaign)
     campaign_section = f"\n{campaign_instructions}" if campaign_instructions else ""
     return f"""You are a LinkedIn ghostwriter for a thought leader. Write an engaging LinkedIn post based on the provided content opportunity and source material.
@@ -67,8 +73,9 @@ def _build_draft_system_prompt(campaign: Campaign, feedback_context: str = "") -
 1. Content guardrails (never violate)
 2. Source content (ground the post in real facts)
 3. Campaign-specific instructions (avoid / prioritize / archetypes for this campaign)
-4. Feedback learnings (apply what worked before)
-5. Personality profile (match the author's voice)
+4. Feedback learnings (manual feedback you recorded on past posts)
+5. Learned from past performance (automated insights from engagement analytics)
+6. Personality profile (match the author's voice)
 
 {guardrails}
 
@@ -76,7 +83,7 @@ def _build_draft_system_prompt(campaign: Campaign, feedback_context: str = "") -
 - **Topics of expertise**: {", ".join(topics)}
 - **Persona**: {campaign.persona}
 - **Tone**: {campaign.tone}
-{campaign_section}{feedback_section}
+{campaign_section}{feedback_section}{learned_section}
 {personality}
 
 ## LinkedIn Post Guidelines

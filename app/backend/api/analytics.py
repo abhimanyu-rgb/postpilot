@@ -12,8 +12,11 @@ router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 @router.get("/posts")
 def list_posts(db: Session = Depends(get_db)):
     """Latest engagement snapshot per post, joined with manual feedback if any."""
+    bundle = analytics_service.list_analytics_with_drafts(db)
     return {
-        "posts": analytics_service.list_analytics_with_drafts(db),
+        "posts": bundle["posts"],
+        "threshold": bundle["threshold"],
+        "threshold_basis": bundle["threshold_basis"],
         "last_refresh": analytics_service.get_last_refresh(db),
     }
 
