@@ -39,14 +39,19 @@ scheduler = BackgroundScheduler()
 # Global kill switch — when True, publish queue processor skips all publishes
 _publish_paused = False
 
-# Content generation runs at this hour the evening before posting day
-GENERATION_HOUR = 20  # 8 PM
+# Content generation runs at this hour the day before posting. Picked to land
+# inside the window when this user's laptop is most likely awake (16:00–18:00 IST).
+# Misfire grace is wide enough that a laptop coming online by ~19:00 still
+# catches today's run; beyond that it falls to the next day.
+GENERATION_HOUR = 16  # 4 PM
+MISFIRE_GRACE_SECONDS = 3 * 3600  # 3 hours
 
 
 def _schedule_campaign(campaign: Campaign) -> None:
     """Schedule content generation for a campaign.
 
-    Runs at 8 PM the day before, so drafts are ready for morning review.
+    Runs in the late afternoon so drafts are ready for review the same evening
+    or the next morning.
     """
     job_id = f"daily_run_campaign_{campaign.id}"
 
@@ -57,13 +62,14 @@ def _schedule_campaign(campaign: Campaign) -> None:
         args=[campaign.id],
         id=job_id,
         replace_existing=True,
-        misfire_grace_time=3600,
+        misfire_grace_time=MISFIRE_GRACE_SECONDS,
     )
     logger.info(
-        "Scheduled content generation for campaign %d at %02d:00 %s (day before posting)",
+        "Scheduled content generation for campaign %d at %02d:00 %s (misfire grace %dh)",
         campaign.id,
         GENERATION_HOUR,
         settings.timezone,
+        MISFIRE_GRACE_SECONDS // 3600,
     )
 
 
