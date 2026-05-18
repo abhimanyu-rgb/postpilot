@@ -33,6 +33,11 @@ export default function SettingsPage() {
   const [minGap, setMinGap] = useState(180);
   const [maxActiveCampaigns, setMaxActiveCampaigns] = useState(3);
   const [linkedinHandle, setLinkedinHandle] = useState("");
+  const [evolutionMinFeedbacks, setEvolutionMinFeedbacks] = useState(5);
+  const [evolutionMinSnapshots, setEvolutionMinSnapshots] = useState(4);
+  const [savingMemory, setSavingMemory] = useState(false);
+  const [memorySaved, setMemorySaved] = useState(false);
+  const [memoryError, setMemoryError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [editingPrefs, setEditingPrefs] = useState(false);
@@ -57,13 +62,15 @@ export default function SettingsPage() {
   useEffect(() => {
     if (status) {
       setTimezone(status.timezone || "UTC"); setDailyBudget(status.daily_post_budget); setMinGap(status.min_gap_minutes); setMaxActiveCampaigns(status.max_active_campaigns ?? 3); setLinkedinHandle(status.linkedin_profile_handle || "");
+      setEvolutionMinFeedbacks(status.evolution_min_feedbacks ?? 5);
+      setEvolutionMinSnapshots(status.evolution_min_snapshots ?? 4);
       setEditingPrefs(!status.setup_complete);
     }
   }, [status]);
 
   async function handleSaveSettings(e: FormEvent) {
     e.preventDefault(); setSaving(true); setError(null); setSaved(false);
-    try { await api.put("/api/setup/settings", { timezone, daily_post_budget: dailyBudget, min_gap_minutes: minGap, max_active_campaigns: maxActiveCampaigns, linkedin_profile_handle: linkedinHandle.trim() || null }); setSaved(true); setEditingPrefs(false); refresh(); setTimeout(() => setSaved(false), 3000); }
+    try { await api.put("/api/setup/settings", { timezone, daily_post_budget: dailyBudget, min_gap_minutes: minGap, max_active_campaigns: maxActiveCampaigns, linkedin_profile_handle: linkedinHandle.trim() || null, evolution_min_feedbacks: evolutionMinFeedbacks, evolution_min_snapshots: evolutionMinSnapshots }); setSaved(true); setEditingPrefs(false); refresh(); setTimeout(() => setSaved(false), 3000); }
     catch (e) { setError(e instanceof Error ? e.message : "Failed"); } finally { setSaving(false); }
   }
 
@@ -77,6 +84,23 @@ export default function SettingsPage() {
     setValidating(true); setValidated(false);
     try { await api.post("/api/setup/validate-env"); await refresh(); const u = await api.get<EnvConfig>("/api/setup/env-config"); setEnvConfig(u); setValidated(true); setTimeout(() => setValidated(false), 3000); }
     catch (e) { alert(e instanceof Error ? e.message : "Validation failed"); } finally { setValidating(false); }
+  }
+
+  async function handleSaveMemory() {
+    if (!status) return;
+    setSavingMemory(true); setMemoryError(null); setMemorySaved(false);
+    try {
+      await api.put("/api/setup/settings", {
+        timezone, daily_post_budget: dailyBudget, min_gap_minutes: minGap,
+        max_active_campaigns: maxActiveCampaigns,
+        linkedin_profile_handle: linkedinHandle.trim() || null,
+        evolution_min_feedbacks: evolutionMinFeedbacks,
+        evolution_min_snapshots: evolutionMinSnapshots,
+      });
+      setMemorySaved(true); refresh();
+      setTimeout(() => setMemorySaved(false), 3000);
+    } catch (e) { setMemoryError(e instanceof Error ? e.message : "Save failed"); }
+    finally { setSavingMemory(false); }
   }
 
   async function handleSaveLearned() {
@@ -205,6 +229,44 @@ export default function SettingsPage() {
               {saved && <p className="text-[10px] text-emerald-600 mt-2 animate-fade-in">Saved</p>}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Memory & Learning — thresholds for when engagement/feedback shapes the personality */}
+      <div className="rounded-xl border border-indigo-100/50 bg-white shadow-sm mb-4">
+        <div className="px-4 py-3 border-b border-indigo-50 flex items-center justify-between">
+          <div>
+            <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Memory & Learning</h2>
+            <p className="text-[10px] text-gray-400 mt-0.5">When does PostPilot start learning from your manual feedback and post engagement?</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {memorySaved && <span className="text-[10px] text-emerald-600 animate-fade-in">Saved</span>}
+          </div>
+        </div>
+        <div className="p-4 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] text-gray-500 uppercase tracking-wide font-semibold block mb-1">Min Manual Feedbacks</label>
+              <input type="number" min={2} max={50} value={evolutionMinFeedbacks}
+                onChange={(e) => setEvolutionMinFeedbacks(Number(e.target.value))}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-xs focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20" />
+              <p className="text-[9px] text-gray-400 mt-1">Personality evolution fires once you&rsquo;ve rated at least this many posts. Lower = faster learning, more noise.</p>
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-500 uppercase tracking-wide font-semibold block mb-1">Min Engagement Snapshots</label>
+              <input type="number" min={2} max={50} value={evolutionMinSnapshots}
+                onChange={(e) => setEvolutionMinSnapshots(Number(e.target.value))}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-xs focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20" />
+              <p className="text-[9px] text-gray-400 mt-1">Engagement-based learning fires after this many weekly scrapes. Same threshold gates the &ldquo;top quartile&rdquo; marker in Analytics.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 pt-1">
+            <button type="button" onClick={handleSaveMemory} disabled={savingMemory}
+              className="rounded-lg bg-gradient-to-r from-indigo-500 to-violet-600 px-3.5 py-1.5 text-xs font-medium text-white hover:from-indigo-600 hover:to-violet-700 disabled:opacity-50 shadow-sm">
+              {savingMemory ? "Saving..." : "Save thresholds"}
+            </button>
+            {memoryError && <p className="text-[10px] text-rose-600">{memoryError}</p>}
+          </div>
         </div>
       </div>
 

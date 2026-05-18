@@ -44,6 +44,8 @@ def get_setup_status(db: Session) -> SetupStatusResponse:
         min_gap_minutes=config.min_gap_minutes,
         max_active_campaigns=config.max_active_campaigns,
         linkedin_profile_handle=config.linkedin_profile_handle,
+        evolution_min_feedbacks=config.evolution_min_feedbacks,
+        evolution_min_snapshots=config.evolution_min_snapshots,
         earliest_campaign_month=earliest_month,
     )
 
@@ -179,6 +181,10 @@ def save_account_settings(db: Session, request: AccountSettingsRequest) -> None:
                 h = h[len(prefix):]
         h = h.rstrip("/").split("?")[0]
         config.linkedin_profile_handle = h or None
+    if request.evolution_min_feedbacks is not None:
+        config.evolution_min_feedbacks = request.evolution_min_feedbacks
+    if request.evolution_min_snapshots is not None:
+        config.evolution_min_snapshots = request.evolution_min_snapshots
     db.commit()
     logger.info("Account settings updated")
 

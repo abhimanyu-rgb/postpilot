@@ -20,17 +20,45 @@ from app.backend.core.config import settings
 from app.backend.core.database import SessionLocal
 from app.backend.models.draft import Draft
 from app.backend.models.integration_config import IntegrationConfig
+from app.backend.models.post_analytics import PostAnalytics
 from app.backend.models.post_feedback import PostFeedback
 from app.backend.models.published_post import PublishedPost
 
 logger = logging.getLogger("orchestrator")
 
 
+def _latest_engagement_by_draft(db: Session, draft_ids: list[int]) -> dict[int, int]:
+    """Return the most-recent reaction count per draft, from post_analytics.
+
+    Returns {draft_id: reactions}. Drafts without any analytics snapshot are
+    absent from the map (callers should treat that as 'unknown', not 'zero').
+    """
+    if not draft_ids:
+        return {}
+    rows = (
+        db.query(PostAnalytics)
+        .filter(PostAnalytics.draft_id.in_(draft_ids))
+        .filter(PostAnalytics.reactions.isnot(None))
+        .order_by(PostAnalytics.draft_id, PostAnalytics.scraped_at.desc())
+        .all()
+    )
+    out: dict[int, int] = {}
+    for r in rows:
+        if r.draft_id not in out:  # first row per draft is the latest
+            out[r.draft_id] = r.reactions
+    return out
+
+
 def update_voice_snapshot(db: Session) -> None:
     """Rebuild the voice snapshot from recent published posts (last 30 days).
 
     Called after each publish. Summarizes the user's recent public positions
-    into a compact snapshot that can be used for drift detection.
+    into a compact snapshot used for drift detection.
+
+    Engagement-aware: each post is annotated with its latest reaction count
+    when known, and posts above the median are explicitly tagged as
+    "high-performer". This lets the summary privilege positions that
+    resonated rather than treating every post as equal weight.
     """
     config = db.query(IntegrationConfig).filter(IntegrationConfig.id == 1).first()
     if not config:
@@ -48,24 +76,42 @@ def update_voice_snapshot(db: Session) -> None:
     if not recent_posts:
         return
 
-    # Collect the published texts
-    post_texts = []
-    for pub in recent_posts:
-        draft = db.query(Draft).filter(Draft.id == pub.draft_id).first()
-        if draft:
-            post_texts.append(draft.primary_text[:300])
+    # Pull draft + engagement for each
+    draft_ids = [p.draft_id for p in recent_posts]
+    drafts_by_id = {
+        d.id: d for d in db.query(Draft).filter(Draft.id.in_(draft_ids)).all()
+    }
+    engagement_by_draft = _latest_engagement_by_draft(db, draft_ids)
 
-    if not post_texts:
+    # Compute median over known engagement values, for high-performer tagging
+    known = sorted([v for v in engagement_by_draft.values()])
+    median = known[len(known) // 2] if known else None
+
+    # Build engagement-annotated text blocks
+    annotated_posts = []
+    for pub in recent_posts:
+        draft = drafts_by_id.get(pub.draft_id)
+        if not draft:
+            continue
+        reactions = engagement_by_draft.get(pub.draft_id)
+        if reactions is None:
+            tag = "[engagement: not yet measured]"
+        elif median is not None and reactions > median:
+            tag = f"[engagement: {reactions} reactions — HIGH PERFORMER vs your median of {median}]"
+        else:
+            tag = f"[engagement: {reactions} reactions]"
+        annotated_posts.append(f"{tag}\n{draft.primary_text[:300]}")
+
+    if not annotated_posts:
         return
 
-    # Use Claude to create a compact summary of positions and themes
     try:
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        posts_block = "\n---\n".join(post_texts)
+        posts_block = "\n---\n".join(annotated_posts)
 
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=500,
+            max_tokens=600,
             messages=[{
                 "role": "user",
                 "content": f"""Analyze these recent LinkedIn posts and create a compact summary of:
@@ -73,8 +119,11 @@ def update_voice_snapshot(db: Session) -> None:
 2. Recurring themes and topics
 3. The author's stance on major topics
 4. Any strong claims or predictions made
+5. Which framings, hooks, or angles correlated with HIGH PERFORMER engagement
 
-Keep it under 400 words. Be specific about positions taken.
+Privilege positions and framings from HIGH PERFORMER posts when summarizing the author's stance — those are the ones the audience actually responded to. Posts marked "not yet measured" are recent and uncalibrated; weight them as neutral.
+
+Keep the whole summary under 450 words. Be specific about positions taken and what resonated.
 
 Posts (most recent first):
 {posts_block}""",
@@ -85,7 +134,10 @@ Posts (most recent first):
         config.voice_snapshot = snapshot
         config.voice_snapshot_post_count = len(recent_posts)
         db.commit()
-        logger.info("Voice snapshot updated (%d posts)", len(recent_posts))
+        logger.info(
+            "Voice snapshot updated (%d posts, %d with engagement data, median=%s)",
+            len(recent_posts), len(known), median,
+        )
 
         from app.backend.services.token_tracker import track_usage
         track_usage(response, service="voice_snapshot")
@@ -152,20 +204,60 @@ Only flag genuine contradictions or significant stance changes. Topic variety ac
         return None
 
 
+def _summarize_engagement_patterns(db: Session, top_n: int = 5) -> dict | None:
+    """Pull top and bottom performers from post_analytics, with their post text.
+
+    Returns {"top": [{text, reactions}], "bottom": [...], "snapshot_count": N}
+    or None if no analytics rows yet.
+    """
+    # One snapshot per draft — take the latest for each
+    latest_rows = (
+        db.query(PostAnalytics, Draft)
+        .join(Draft, Draft.id == PostAnalytics.draft_id)
+        .filter(PostAnalytics.reactions.isnot(None))
+        .order_by(PostAnalytics.draft_id, PostAnalytics.scraped_at.desc())
+        .all()
+    )
+    if not latest_rows:
+        return None
+    seen: set[int] = set()
+    latest: list[tuple[PostAnalytics, Draft]] = []
+    for snap, draft in latest_rows:
+        if draft.id in seen:
+            continue
+        seen.add(draft.id)
+        latest.append((snap, draft))
+    latest.sort(key=lambda r: r[0].reactions or 0, reverse=True)
+    top = [
+        {"text": d.primary_text[:280], "reactions": s.reactions}
+        for s, d in latest[:top_n]
+    ]
+    bottom = [
+        {"text": d.primary_text[:280], "reactions": s.reactions}
+        for s, d in latest[-top_n:]
+        if (s, d) not in latest[:top_n]
+    ]
+    return {"top": top, "bottom": bottom, "snapshot_count": len(latest)}
+
+
 def analyze_personality_evolution(db: Session) -> dict | None:
-    """Analyze feedback patterns to suggest personality profile updates.
+    """Analyze feedback patterns AND engagement patterns to suggest personality updates.
 
-    Called periodically (e.g., after every 10 feedbacks). Looks at:
-    - Which post types consistently perform well
-    - Which elements are repeatedly tagged as effective
-    - What improvement notes keep recurring
-    - How the user's voice has naturally shifted
+    Dual-trigger: fires when either signal source has enough rows. Thresholds
+    are user-configurable on integration_config (evolution_min_feedbacks /
+    evolution_min_snapshots), defaults 5 and 4.
 
-    Returns suggested updates, or None if not enough data.
+    Manual feedback is treated as the stronger signal ("what worked / didn't"
+    is the user's judgment); engagement is supporting ("the audience
+    responded"). Suggestions are still staged via the log + learned_context
+    append — no silent overwrite of personality_prompt.
     """
     config = db.query(IntegrationConfig).filter(IntegrationConfig.id == 1).first()
     if not config:
         return None
+
+    min_feedbacks = config.evolution_min_feedbacks or 5
+    min_snapshots = config.evolution_min_snapshots or 4
 
     feedbacks = (
         db.query(PostFeedback)
@@ -173,15 +265,22 @@ def analyze_personality_evolution(db: Session) -> dict | None:
         .limit(20)
         .all()
     )
+    engagement = _summarize_engagement_patterns(db)
+    feedback_ok = len(feedbacks) >= min_feedbacks
+    engagement_ok = engagement is not None and engagement["snapshot_count"] >= min_snapshots
 
-    if len(feedbacks) < 5:
+    if not feedback_ok and not engagement_ok:
+        logger.info(
+            "Personality evolution skipped — need >=%d feedbacks (%d) OR >=%d snapshots (%d)",
+            min_feedbacks, len(feedbacks),
+            min_snapshots, engagement["snapshot_count"] if engagement else 0,
+        )
         return None
 
-    # Build feedback summary
+    # Build feedback summary (may be empty if engagement-only trigger fired)
     ratings = [f.performance_rating for f in feedbacks if f.performance_rating]
     elements: dict[str, int] = {}
     improvements: list[str] = []
-
     for fb in feedbacks:
         if fb.effective_elements_json:
             try:
@@ -191,36 +290,58 @@ def analyze_personality_evolution(db: Session) -> dict | None:
                 pass
         if fb.improvement_notes:
             improvements.append(fb.improvement_notes)
-
     top_elements = sorted(elements.items(), key=lambda x: x[1], reverse=True)[:5]
     great_count = ratings.count("great") + ratings.count("good")
     poor_count = ratings.count("poor") + ratings.count("average")
 
+    feedback_block = "(no manual feedback yet)"
+    if feedback_ok:
+        feedback_block = (
+            f"- Ratings: {great_count} great/good, {poor_count} average/poor out of {len(ratings)}\n"
+            f"- Top effective elements: {', '.join(f'{el} ({count}x)' for el, count in top_elements) or '(none)'}\n"
+            f"- Recurring improvement notes: {'; '.join(improvements[:5]) or '(none)'}"
+        )
+
+    engagement_block = "(no engagement data yet)"
+    if engagement_ok:
+        top_lines = "\n".join(f"  - [{p['reactions']} reactions] {p['text']}" for p in engagement["top"])
+        bottom_lines = "\n".join(f"  - [{p['reactions']} reactions] {p['text']}" for p in engagement["bottom"])
+        engagement_block = (
+            f"- Total posts measured: {engagement['snapshot_count']}\n"
+            f"- TOP performers:\n{top_lines}\n"
+            f"- BOTTOM performers:\n{bottom_lines}"
+        )
+
     try:
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-
         current_profile = config.personality_prompt or ""
-
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=500,
+            max_tokens=600,
             messages=[{
                 "role": "user",
-                "content": f"""Based on these feedback patterns from {len(feedbacks)} posts, suggest specific updates to the author's personality profile.
+                "content": f"""Suggest specific updates to the author's personality profile based on TWO signals.
 
 CURRENT PROFILE:
 {current_profile[:500]}
 
-FEEDBACK PATTERNS:
-- Ratings: {great_count} great/good, {poor_count} average/poor out of {len(ratings)}
-- Top effective elements: {', '.join(f'{el} ({count}x)' for el, count in top_elements)}
-- Recurring improvement notes: {'; '.join(improvements[:5])}
+SIGNAL 1 — Manual feedback the author recorded (treat as the strongest signal — it's the author's own judgment of what worked):
+{feedback_block}
+
+SIGNAL 2 — Public engagement on published posts (treat as supporting evidence — audience reaction can be noisy):
+{engagement_block}
+
+Reconciliation rules:
+- If both signals agree (e.g., hook style X is rated "great" AND its posts top engagement): high confidence, suggest.
+- If only manual feedback supports a pattern: medium confidence, suggest if pattern is clear.
+- If only engagement supports a pattern: lower confidence, suggest only if the pattern is strong (top performers share a clearly identifiable trait absent from bottom performers).
+- If signals conflict (author rated "poor" but post got high engagement, or vice versa): note the conflict, do NOT suggest a change. Audience preference and author intent diverging is information, not a directive.
 
 Respond with ONLY a JSON object:
 {{
   "has_suggestions": true/false,
   "suggestions": [
-    {{"area": "hooks|structure|tone|topics", "current": "what the profile says now", "suggested": "what it should say", "reason": "based on what feedback pattern"}}
+    {{"area": "hooks|structure|tone|topics", "current": "what the profile says now", "suggested": "what it should say", "reason": "based on which signal(s) and what pattern", "confidence": "high|medium|low"}}
   ],
   "summary": "one line summary of the evolution direction"
 }}

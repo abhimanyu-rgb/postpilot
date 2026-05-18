@@ -12,6 +12,8 @@ class SetupStatusResponse(BaseModel):
     min_gap_minutes: int = 180
     max_active_campaigns: int = 3
     linkedin_profile_handle: str | None = None  # Vanity name in linkedin.com/in/<handle>
+    evolution_min_feedbacks: int = 5
+    evolution_min_snapshots: int = 4
     earliest_campaign_month: str | None = None  # "YYYY-MM" of the earliest campaign created by this user
 
 
@@ -35,6 +37,8 @@ class AccountSettingsRequest(BaseModel):
     min_gap_minutes: int = Field(ge=30, le=1440, default=180)
     max_active_campaigns: int = Field(ge=1, le=20, default=3)
     linkedin_profile_handle: str | None = Field(default=None, max_length=200)
+    evolution_min_feedbacks: int | None = Field(default=None, ge=2, le=50)
+    evolution_min_snapshots: int | None = Field(default=None, ge=2, le=50)
 
 
 class SetupValidationResponse(BaseModel):

@@ -87,10 +87,17 @@ def _cohort_drafts(db: Session) -> list[tuple[Draft, PublishedPost]]:
     return rows
 
 
+def _min_snapshots_required(db: Session) -> int:
+    """Read the user-configured minimum from integration_config."""
+    config = db.query(IntegrationConfig).filter(IntegrationConfig.id == 1).first()
+    return (config.evolution_min_snapshots if config else None) or 4
+
+
 def _high_engagement_threshold(db: Session) -> float | None:
     """Return the engagement_score at the configured quartile, over the last
-    90 days of analytics snapshots. Returns None if not enough data yet
-    (need at least 4 snapshots to draw a meaningful quartile).
+    90 days of analytics snapshots. Returns None if not enough data yet —
+    threshold needs at least `evolution_min_snapshots` (configurable, default 4)
+    to be meaningful.
     """
     cutoff = datetime.utcnow() - timedelta(days=LOOKBACK_DAYS_FOR_QUARTILE)
     # Take the most recent snapshot per draft (avoid counting the same draft
@@ -101,7 +108,8 @@ def _high_engagement_threshold(db: Session) -> float | None:
         .filter(PostAnalytics.engagement_score.isnot(None))
         .all()
     )
-    if len(sub) < 4:
+    min_required = _min_snapshots_required(db)
+    if len(sub) < min_required:
         return None
     latest_per_draft: dict[int, float] = {}
     for draft_id, score in sub:
@@ -438,7 +446,7 @@ def list_analytics_with_drafts(db: Session, limit: int = 50) -> dict:
         "threshold_basis": {
             "quartile": INSIGHT_QUARTILE,
             "lookback_days": LOOKBACK_DAYS_FOR_QUARTILE,
-            "min_snapshots_required": 4,
+            "min_snapshots_required": _min_snapshots_required(db),
         },
     }
 

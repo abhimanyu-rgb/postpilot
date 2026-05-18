@@ -14,6 +14,8 @@ export interface SetupStatus {
   min_gap_minutes: number;
   max_active_campaigns: number;
   linkedin_profile_handle: string | null;
+  evolution_min_feedbacks: number;
+  evolution_min_snapshots: number;
   earliest_campaign_month: string | null;
 }
 

@@ -21,6 +21,12 @@ class IntegrationConfig(Base, IdMixin, FullTimestampMixin):
     max_active_campaigns: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
     linkedin_profile_handle: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Thresholds for personality-evolution / voice-snapshot learning. Editable
+    # from Settings. Both gate the analyze_personality_evolution job — it
+    # fires when EITHER signal source has accumulated enough rows.
+    evolution_min_feedbacks: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    evolution_min_snapshots: Mapped[int] = mapped_column(Integer, nullable=False, default=4)
+
     # User-editable personality profile
     author_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     personality_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
