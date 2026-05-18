@@ -38,6 +38,7 @@ export default function SettingsPage() {
   const [savingMemory, setSavingMemory] = useState(false);
   const [memorySaved, setMemorySaved] = useState(false);
   const [memoryError, setMemoryError] = useState<string | null>(null);
+  const [editingMemory, setEditingMemory] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [editingPrefs, setEditingPrefs] = useState(false);
@@ -97,7 +98,7 @@ export default function SettingsPage() {
         evolution_min_feedbacks: evolutionMinFeedbacks,
         evolution_min_snapshots: evolutionMinSnapshots,
       });
-      setMemorySaved(true); refresh();
+      setMemorySaved(true); setEditingMemory(false); refresh();
       setTimeout(() => setMemorySaved(false), 3000);
     } catch (e) { setMemoryError(e instanceof Error ? e.message : "Save failed"); }
     finally { setSavingMemory(false); }
@@ -241,33 +242,58 @@ export default function SettingsPage() {
           </div>
           <div className="flex items-center gap-2">
             {memorySaved && <span className="text-[10px] text-emerald-600 animate-fade-in">Saved</span>}
+            {!editingMemory && <button onClick={() => setEditingMemory(true)} className="text-[10px] font-medium text-violet-600 hover:text-violet-700">Edit</button>}
           </div>
         </div>
-        <div className="p-4 space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[10px] text-gray-500 uppercase tracking-wide font-semibold block mb-1">Min Manual Feedbacks</label>
-              <input type="number" min={2} max={50} value={evolutionMinFeedbacks}
-                onChange={(e) => setEvolutionMinFeedbacks(Number(e.target.value))}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-xs focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20" />
-              <p className="text-[9px] text-gray-400 mt-1">Personality evolution fires once you&rsquo;ve rated at least this many posts. Lower = faster learning, more noise.</p>
+        {editingMemory ? (
+          <div className="p-4 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] text-gray-500 uppercase tracking-wide font-semibold block mb-1">Min Manual Feedbacks</label>
+                <input type="number" min={2} max={50} value={evolutionMinFeedbacks}
+                  onChange={(e) => setEvolutionMinFeedbacks(Number(e.target.value))}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-xs focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20" />
+                <p className="text-[9px] text-gray-400 mt-1">Personality evolution fires once you&rsquo;ve rated at least this many posts. Lower = faster learning, more noise.</p>
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-500 uppercase tracking-wide font-semibold block mb-1">Min Engagement Snapshots</label>
+                <input type="number" min={2} max={50} value={evolutionMinSnapshots}
+                  onChange={(e) => setEvolutionMinSnapshots(Number(e.target.value))}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-xs focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20" />
+                <p className="text-[9px] text-gray-400 mt-1">Engagement-based learning fires after this many weekly scrapes. Same threshold gates the &ldquo;top quartile&rdquo; marker in Analytics.</p>
+              </div>
             </div>
-            <div>
-              <label className="text-[10px] text-gray-500 uppercase tracking-wide font-semibold block mb-1">Min Engagement Snapshots</label>
-              <input type="number" min={2} max={50} value={evolutionMinSnapshots}
-                onChange={(e) => setEvolutionMinSnapshots(Number(e.target.value))}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-xs focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20" />
-              <p className="text-[9px] text-gray-400 mt-1">Engagement-based learning fires after this many weekly scrapes. Same threshold gates the &ldquo;top quartile&rdquo; marker in Analytics.</p>
+            <div className="flex items-center gap-2 pt-1">
+              <button type="button" onClick={handleSaveMemory} disabled={savingMemory}
+                className="rounded-lg bg-gradient-to-r from-indigo-500 to-violet-600 px-3.5 py-1.5 text-xs font-medium text-white hover:from-indigo-600 hover:to-violet-700 disabled:opacity-50 shadow-sm">
+                {savingMemory ? "Saving..." : "Save thresholds"}
+              </button>
+              <button type="button" onClick={() => {
+                // Revert local state to what's stored
+                setEvolutionMinFeedbacks(status?.evolution_min_feedbacks ?? 5);
+                setEvolutionMinSnapshots(status?.evolution_min_snapshots ?? 4);
+                setEditingMemory(false);
+                setMemoryError(null);
+              }} className="text-[10px] text-gray-400 hover:text-gray-600">Cancel</button>
+              {memoryError && <p className="text-[10px] text-rose-600">{memoryError}</p>}
             </div>
           </div>
-          <div className="flex items-center gap-2 pt-1">
-            <button type="button" onClick={handleSaveMemory} disabled={savingMemory}
-              className="rounded-lg bg-gradient-to-r from-indigo-500 to-violet-600 px-3.5 py-1.5 text-xs font-medium text-white hover:from-indigo-600 hover:to-violet-700 disabled:opacity-50 shadow-sm">
-              {savingMemory ? "Saving..." : "Save thresholds"}
-            </button>
-            {memoryError && <p className="text-[10px] text-rose-600">{memoryError}</p>}
+        ) : (
+          <div className="p-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-[10px] text-gray-400">Min Manual Feedbacks</p>
+                <p className="text-xs font-medium text-gray-700">{evolutionMinFeedbacks}</p>
+                <p className="text-[9px] text-gray-400 mt-0.5">Personality evolution fires after this many ratings.</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-gray-400">Min Engagement Snapshots</p>
+                <p className="text-xs font-medium text-gray-700">{evolutionMinSnapshots}</p>
+                <p className="text-[9px] text-gray-400 mt-0.5">Engagement-based learning + Analytics &ldquo;top quartile&rdquo; threshold.</p>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Writing Personality — full width */}
