@@ -305,6 +305,16 @@ def refresh_analytics(db: Session, handle: str | None = None) -> RefreshResult:
                     draft.id, score, threshold,
                 )
 
+    # Backfill: any draft whose LATEST snapshot is ≥ threshold but has no
+    # staged or promoted insight yet gets one now. This covers posts whose
+    # first qualifying snapshot pre-dated the threshold becoming computable
+    # (e.g., the very first scrapes when there were < min_snapshots).
+    if threshold is not None:
+        backfilled = _backfill_insights_for_top_quartile(db, threshold)
+        new_insights += backfilled
+        if backfilled:
+            logger.info("Backfilled %d top-quartile insights from prior snapshots", backfilled)
+
     db.commit()
     logger.info(
         "Analytics refresh done: scraped=%d matched=%d new_snapshots=%d new_insights=%d skipped=%d",
@@ -317,6 +327,58 @@ def refresh_analytics(db: Session, handle: str | None = None) -> RefreshResult:
         "new_insights": new_insights,
         "skipped_already_scraped_today": skipped,
     }
+
+
+def _backfill_insights_for_top_quartile(db: Session, threshold: float) -> int:
+    """Stage insights for top-quartile drafts that don't yet have any insight.
+
+    "Any insight" = at least one staged_insight row (pending, promoted, or
+    rejected — we don't keep re-asking Claude about the same post). Returns
+    the count of newly-staged insights.
+    """
+    # Latest snapshot per draft, scored ≥ threshold
+    snaps = (
+        db.query(PostAnalytics, Draft)
+        .join(Draft, Draft.id == PostAnalytics.draft_id)
+        .filter(PostAnalytics.engagement_score.isnot(None))
+        .filter(PostAnalytics.engagement_score >= threshold)
+        .order_by(PostAnalytics.draft_id, PostAnalytics.scraped_at.desc())
+        .all()
+    )
+    latest_per_draft: dict[int, tuple[PostAnalytics, Draft]] = {}
+    for snap, draft in snaps:
+        if draft.id not in latest_per_draft:
+            latest_per_draft[draft.id] = (snap, draft)
+
+    # Drafts already covered by an insight (any status)
+    covered = {
+        row[0]
+        for row in db.query(StagedInsight.draft_id)
+        .filter(StagedInsight.draft_id.isnot(None))
+        .all()
+    }
+
+    count = 0
+    for draft_id, (snap, draft) in latest_per_draft.items():
+        if draft_id in covered:
+            continue
+        manual_fb = _fetch_manual_feedback(db, draft_id)
+        insight = _extract_insight(draft, snap.engagement_score or 0.0, manual_fb)
+        if insight:
+            db.add(StagedInsight(
+                analytics_id=snap.id,
+                draft_id=draft_id,
+                insight_text=insight["insight"],
+                reasoning=insight.get("reasoning"),
+                source_summary=insight.get("source_summary"),
+                status="pending",
+            ))
+            count += 1
+            logger.info(
+                "Backfilled insight from draft %d (score=%.0f, threshold=%.0f)",
+                draft_id, snap.engagement_score or 0, threshold,
+            )
+    return count
 
 
 def _exact_match_via_activity_urn(

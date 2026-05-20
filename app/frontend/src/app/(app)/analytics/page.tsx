@@ -250,20 +250,23 @@ export default function AnalyticsPage() {
         <div className="mt-4 rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-xs text-rose-700">{error}</div>
       )}
 
-      {/* Marker legend — explain what the badges mean */}
-      <div className="mt-4 rounded-lg border border-indigo-100/60 bg-indigo-50/30 px-3 py-2 flex items-center gap-4 flex-wrap">
-        <span className="inline-flex items-center gap-1.5 text-[11px] text-gray-700">
-          <span className="rounded px-1.5 py-0.5 bg-amber-100 text-amber-800 font-semibold text-[9px] uppercase tracking-wide">Top quartile</span>
-          {threshold !== null ? (
-            <span className="text-gray-500">≥ {threshold.toFixed(0)} score · top {Math.round((1 - (thresholdBasis?.quartile ?? 0.75)) * 100)}% over last {thresholdBasis?.lookback_days ?? 90}d</span>
-          ) : (
-            <span className="text-gray-400 italic">not yet — needs {thresholdBasis?.min_snapshots_required ?? 4}+ snapshots ({posts.length} so far)</span>
-          )}
-        </span>
-        <span className="inline-flex items-center gap-1.5 text-[11px] text-gray-700">
-          <span className="rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-800 font-semibold text-[9px] uppercase tracking-wide">Insight applied</span>
-          <span className="text-gray-500">an insight from this post is now in your <a href="/settings" className="underline hover:text-indigo-700">learned context</a> and shapes new drafts</span>
-        </span>
+      {/* Marker legend — glossary, only describes what the badges mean when they appear on a row */}
+      <div className="mt-4 rounded-lg border border-indigo-100/60 bg-indigo-50/30 px-3 py-2">
+        <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">What the badges mean</p>
+        <div className="flex items-center gap-4 flex-wrap">
+          <span className="inline-flex items-center gap-1.5 text-[11px] text-gray-700">
+            <span className="rounded px-1.5 py-0.5 bg-amber-100 text-amber-800 font-semibold text-[9px] uppercase tracking-wide">Top quartile</span>
+            {threshold !== null ? (
+              <span className="text-gray-500">when score ≥ {threshold.toFixed(0)} · top {Math.round((1 - (thresholdBasis?.quartile ?? 0.75)) * 100)}% over last {thresholdBasis?.lookback_days ?? 90}d</span>
+            ) : (
+              <span className="text-gray-400 italic">no threshold yet — needs {thresholdBasis?.min_snapshots_required ?? 4}+ snapshots ({posts.length} so far)</span>
+            )}
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-[11px] text-gray-700">
+            <span className="rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-800 font-semibold text-[9px] uppercase tracking-wide">Insight applied</span>
+            <span className="text-gray-500">when an insight from this post has been added to <a href="/settings" className="underline hover:text-indigo-700">learned context</a></span>
+          </span>
+        </div>
       </div>
 
       {/* Staged insights */}
