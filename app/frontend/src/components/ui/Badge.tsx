@@ -8,8 +8,11 @@ const COLORS: Record<string, string> = {
   failed: "bg-rose-50 text-rose-700",
   degraded: "bg-amber-50 text-amber-700",
   pending_review: "bg-sky-50 text-sky-700",
+  approved: "bg-amber-50 text-amber-700",
   queued: "bg-violet-50 text-violet-700",
   published: "bg-emerald-50 text-emerald-700",
+  rejected: "bg-rose-50 text-rose-700",
+  publish_failed: "bg-rose-100 text-rose-800",
 };
 
 interface Props {
@@ -27,8 +30,8 @@ export default function Badge({ status, className = "" }: Props) {
       <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
         status === "active" ? "bg-emerald-500" :
         status === "running" ? "bg-indigo-500" :
-        status === "paused" ? "bg-amber-500" :
-        status === "failed" ? "bg-rose-500" :
+        status === "paused" || status === "approved" ? "bg-amber-500" :
+        status === "failed" || status === "rejected" || status === "publish_failed" ? "bg-rose-500" :
         "bg-current opacity-40"
       }`} />
       {label}

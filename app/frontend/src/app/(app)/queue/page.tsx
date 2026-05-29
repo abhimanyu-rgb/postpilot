@@ -1,7 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+
+type QueueTab = "pending_review" | "approved" | "queued";
+
+const TAB_ORDER: QueueTab[] = ["pending_review", "approved", "queued"];
+const TAB_LABEL: Record<QueueTab, string> = {
+  pending_review: "Pending Review",
+  approved: "Approved",
+  queued: "Queued",
+};
 
 interface DraftItem {
   id: number;
@@ -40,6 +49,8 @@ interface MediaSuggestion {
 export default function QueuePage() {
   const [drafts, setDrafts] = useState<DraftItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<QueueTab>("pending_review");
+  const [counts, setCounts] = useState<Record<QueueTab, number>>({ pending_review: 0, approved: 0, queued: 0 });
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [actionLoading, setActionLoading] = useState<number | null>(null);
 
@@ -75,12 +86,14 @@ export default function QueuePage() {
   const [mediaLoading, setMediaLoading] = useState(false);
   const [selectedMedia, setSelectedMedia] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    api
-      .get<DraftItem[]>("/api/drafts/?status=pending_review")
-      .then((data) => {
-        setDrafts(data);
-        // Check drift and duplicates for each draft in background
+  const loadDrafts = useCallback(async (tab: QueueTab) => {
+    setLoading(true);
+    try {
+      const data = await api.get<DraftItem[]>(`/api/drafts/?status=${tab}`);
+      setDrafts(data);
+      // Drift + duplicate checks only matter when reviewing — once approved
+      // or queued the user has already accepted the post.
+      if (tab === "pending_review") {
         data.forEach((d) => {
           api.get<{ has_drift: boolean; severity?: string; explanation?: string }>(
             `/api/drafts/${d.id}/drift-check`
@@ -93,10 +106,30 @@ export default function QueuePage() {
             if (result.has_overlap) setDupResults((prev) => ({ ...prev, [d.id]: result }));
           }).catch(() => {});
         });
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+      }
+    } catch {
+      // fail open — empty list is fine
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  const refreshCounts = useCallback(async () => {
+    const results = await Promise.all(
+      TAB_ORDER.map((t) =>
+        api.get<DraftItem[]>(`/api/drafts/?status=${t}`).then((d) => [t, d.length] as const).catch(() => [t, 0] as const)
+      )
+    );
+    setCounts(Object.fromEntries(results) as Record<QueueTab, number>);
+  }, []);
+
+  useEffect(() => {
+    loadDrafts(activeTab);
+  }, [activeTab, loadDrafts]);
+
+  useEffect(() => {
+    refreshCounts();
+  }, [refreshCounts, drafts.length]);
 
   async function handleApprove(id: number) {
     setActionLoading(id);
@@ -339,8 +372,8 @@ export default function QueuePage() {
         confidence_score: number;
         campaign_name: string;
       }>(`/api/drafts/generate-from-candidate/${candidateId}`);
-      // Reload drafts
-      const updated = await api.get<DraftItem[]>("/api/drafts/?status=pending_review");
+      // Reload drafts in the currently visible tab
+      const updated = await api.get<DraftItem[]>(`/api/drafts/?status=${activeTab}`);
       setDrafts(updated);
       setAlternatesForId(null);
     } catch (e) {
@@ -350,38 +383,50 @@ export default function QueuePage() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="p-8">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 w-48 bg-gray-200 rounded-lg" />
-          <div className="h-48 bg-gray-100 rounded-xl" />
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="p-6 max-w-[900px]">
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center justify-between gap-3 mb-4">
         <h1 className="text-xl font-semibold text-gray-900">Review Queue</h1>
-        {drafts.length > 0 && (
-          <span className="rounded-full bg-indigo-100 text-indigo-700 px-2.5 py-0.5 text-xs font-semibold">
-            {drafts.length}
-          </span>
-        )}
       </div>
 
-      {drafts.length === 0 ? (
+      {/* Tab bar */}
+      <div className="flex gap-1 mb-6 bg-gray-100 rounded-lg p-1 w-fit">
+        {TAB_ORDER.map((t) => (
+          <button
+            key={t}
+            onClick={() => setActiveTab(t)}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium ${activeTab === t ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+          >
+            {TAB_LABEL[t]}{counts[t] > 0 ? ` (${counts[t]})` : ""}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="animate-pulse space-y-4">
+          <div className="h-48 bg-gray-100 rounded-xl" />
+          <div className="h-32 bg-gray-100 rounded-xl" />
+        </div>
+      ) : drafts.length === 0 ? (
         <div className="rounded-xl border-2 border-dashed border-gray-200 p-16 text-center">
           <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
             <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
             </svg>
           </div>
-          <h3 className="text-sm font-medium text-gray-700 mb-1">No drafts pending review</h3>
-          <p className="text-xs text-gray-400 mb-3">Drafts appear after campaign runs or when you write a post.</p>
-          <a href="/write" className="text-xs font-medium text-violet-600 hover:text-violet-700">Write a Post</a>
+          <h3 className="text-sm font-medium text-gray-700 mb-1">
+            {activeTab === "pending_review" ? "No drafts pending review" :
+             activeTab === "approved" ? "No approved drafts waiting to publish" :
+             "Nothing in the publish queue"}
+          </h3>
+          <p className="text-xs text-gray-400 mb-3">
+            {activeTab === "pending_review" ? "Drafts appear after campaign runs or when you write a post." :
+             activeTab === "approved" ? "Approved drafts move to Queued once the publish processor picks them up." :
+             "Queued drafts publish in FIFO order respecting your posting window and daily budget."}
+          </p>
+          {activeTab === "pending_review" && (
+            <a href="/write" className="text-xs font-medium text-violet-600 hover:text-violet-700">Write a Post</a>
+          )}
         </div>
       ) : (
         <div className="space-y-4">
