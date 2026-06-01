@@ -244,16 +244,32 @@ export default function HistoryPage() {
   };
 
   // Group by month — use best available date, skip "None" strings
-  const grouped: Record<string, DraftItem[]> = {};
+  // Group by month label, but keep the chronological key (YYYY-MM) on each
+  // group so we can sort newest-first regardless of insertion order. Without
+  // this, a recently-published post in a new month gets buried below older
+  // months that had high rejection traffic.
+  const groupedByKey: Record<string, { label: string; items: DraftItem[] }> = {};
   for (const d of filtered) {
     const pub = d.published_at && d.published_at !== "None" ? d.published_at : null;
     const date = pub || d.selection_date || d.created_at;
-    const month = date && date !== "None" ? date.substring(0, 7) : "unknown";
-    const label = month !== "unknown" ? new Date(month + "-01").toLocaleDateString("en-US", { month: "long", year: "numeric" }) : "Other";
-    if (!grouped[label]) grouped[label] = [];
-    grouped[label].push(d);
+    const key = date && date !== "None" ? date.substring(0, 7) : "unknown";
+    const label = key !== "unknown" ? new Date(key + "-01").toLocaleDateString("en-US", { month: "long", year: "numeric" }) : "Other";
+    if (!groupedByKey[key]) groupedByKey[key] = { label, items: [] };
+    groupedByKey[key].items.push(d);
   }
-  const months = Object.keys(grouped);
+  const sortedMonthKeys = Object.keys(groupedByKey).sort((a, b) => {
+    if (a === "unknown") return 1;
+    if (b === "unknown") return -1;
+    return b.localeCompare(a);  // YYYY-MM lexicographic = chronological reverse
+  });
+  // Maintain the old `grouped` and `months` shape downstream so the
+  // existing render loop and toggleMonth state keep working.
+  const grouped: Record<string, DraftItem[]> = {};
+  const months: string[] = [];
+  for (const k of sortedMonthKeys) {
+    grouped[groupedByKey[k].label] = groupedByKey[k].items;
+    months.push(groupedByKey[k].label);
+  }
 
   if (loading) {
     return (<div className="p-8"><div className="animate-pulse space-y-4"><div className="h-8 w-48 bg-gray-200 rounded-lg" /><div className="h-32 bg-gray-100 rounded-xl" /></div></div>);

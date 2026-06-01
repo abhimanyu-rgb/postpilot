@@ -172,6 +172,20 @@ export default function QueuePage() {
     }
   }
 
+  async function handleRevert(id: number) {
+    setActionLoading(id);
+    try {
+      await api.post(`/api/drafts/${id}/revert`);
+      // Drop from current tab — it's now in Pending Review
+      setDrafts((prev) => prev.filter((d) => d.id !== id));
+    } catch (e: unknown) {
+      const err = e as { body?: { detail?: string }; message?: string };
+      alert(err?.body?.detail || err?.message || "Revert failed");
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
   async function handleReject(id: number) {
     if (!confirm("Reject this draft? It will move to history.")) return;
     setActionLoading(id);
@@ -926,30 +940,63 @@ export default function QueuePage() {
                     </button>
                   </div>
                   <div className="flex gap-2">
-                    <button
-                      onClick={() => handleReject(draft.id)}
-                      disabled={isActing}
-                      className="rounded-lg border border-gray-300 px-4 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-50 flex items-center gap-1.5"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                      Reject
-                    </button>
-                    <button
-                      onClick={() => handleApprove(draft.id)}
-                      disabled={isActing}
-                      className="rounded-lg bg-emerald-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50 shadow-sm flex items-center gap-1.5"
-                    >
-                      {isActing ? (
-                        <div className="animate-spin w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full" />
-                      ) : (
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                        </svg>
-                      )}
-                      Approve
-                    </button>
+                    {activeTab === "pending_review" ? (
+                      <>
+                        <button
+                          onClick={() => handleReject(draft.id)}
+                          disabled={isActing}
+                          className="rounded-lg border border-gray-300 px-4 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-50 flex items-center gap-1.5"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                          Reject
+                        </button>
+                        <button
+                          onClick={() => handleApprove(draft.id)}
+                          disabled={isActing}
+                          className="rounded-lg bg-emerald-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50 shadow-sm flex items-center gap-1.5"
+                        >
+                          {isActing ? (
+                            <div className="animate-spin w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full" />
+                          ) : (
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                          Approve
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => handleReject(draft.id)}
+                          disabled={isActing}
+                          className="rounded-lg border border-gray-300 px-4 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-50 flex items-center gap-1.5"
+                          title="Reject this draft — moves to history"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                          Reject
+                        </button>
+                        <button
+                          onClick={() => handleRevert(draft.id)}
+                          disabled={isActing}
+                          className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 flex items-center gap-1.5"
+                          title="Move back to Pending Review to edit"
+                        >
+                          {isActing ? (
+                            <div className="animate-spin w-3.5 h-3.5 border-2 border-indigo-700 border-t-transparent rounded-full" />
+                          ) : (
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                            </svg>
+                          )}
+                          Revert to Pending
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
