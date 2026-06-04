@@ -106,30 +106,47 @@ function EngagementChart({ points }: { points: SparklinePoint[] }) {
   );
 }
 
+interface RefreshResult { scraped_count: number; matched_count: number; new_snapshots: number; new_insights: number; skipped_already_scraped_today?: number }
+
 export default function DashboardPage() {
   const [campaigns, setCampaigns] = useState<CampaignListData | null>(null);
   const [tokenStats, setTokenStats] = useState<TokenStats | null>(null);
   const [publishQueue, setPublishQueue] = useState<PublishQueueStatus | null>(null);
   const [kpis, setKpis] = useState<DashboardKpis | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshResult, setRefreshResult] = useState<RefreshResult | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+
+  async function loadAll() {
+    const [data, tokens, queue, k] = await Promise.all([
+      api.get<CampaignListData>("/api/campaigns/"),
+      api.get<TokenStats>("/api/setup/token-usage").catch(() => null),
+      api.get<PublishQueueStatus>("/api/setup/publish-queue").catch(() => null),
+      api.get<DashboardKpis>("/api/dashboard/kpis").catch(() => null),
+    ]);
+    setCampaigns(data);
+    if (tokens) setTokenStats(tokens);
+    if (queue) setPublishQueue(queue);
+    if (k) setKpis(k);
+  }
 
   useEffect(() => {
-    async function load() {
-      try {
-        const [data, tokens, queue, k] = await Promise.all([
-          api.get<CampaignListData>("/api/campaigns/"),
-          api.get<TokenStats>("/api/setup/token-usage").catch(() => null),
-          api.get<PublishQueueStatus>("/api/setup/publish-queue").catch(() => null),
-          api.get<DashboardKpis>("/api/dashboard/kpis").catch(() => null),
-        ]);
-        setCampaigns(data);
-        if (tokens) setTokenStats(tokens);
-        if (queue) setPublishQueue(queue);
-        if (k) setKpis(k);
-      } catch { /* empty */ } finally { setLoading(false); }
-    }
-    load();
+    loadAll().catch(() => {}).finally(() => setLoading(false));
   }, []);
+
+  async function handleRefresh() {
+    setRefreshing(true); setRefreshError(null); setRefreshResult(null);
+    try {
+      const result = await api.post<RefreshResult>("/api/analytics/refresh", {});
+      setRefreshResult(result);
+      await loadAll();
+    } catch (e) {
+      setRefreshError(e instanceof Error ? e.message : "Refresh failed");
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -157,16 +174,43 @@ export default function DashboardPage() {
 
   return (
     <div className="p-6 max-w-[1100px]">
-      <div className="flex items-end justify-between mb-6">
+      <div className="flex items-end justify-between mb-3">
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Dashboard</h1>
           <p className="text-xs text-gray-400 mt-0.5">Your LinkedIn growth at a glance</p>
         </div>
-        <Link href="/campaigns/new" className="rounded-lg bg-gradient-to-r from-indigo-500 to-violet-600 px-3.5 py-1.5 text-xs font-medium text-white hover:from-indigo-600 hover:to-violet-700 shadow-sm flex items-center gap-1.5">
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-          New Campaign
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            title="Re-scrape LinkedIn engagement and recompute KPIs"
+            className="rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-50 disabled:opacity-50 flex items-center gap-1.5"
+          >
+            {refreshing ? (
+              <div className="animate-spin w-3 h-3 border border-violet-600 border-t-transparent rounded-full" />
+            ) : (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+            )}
+            {refreshing ? "Refreshing..." : "Refresh"}
+          </button>
+          <Link href="/campaigns/new" className="rounded-lg bg-gradient-to-r from-indigo-500 to-violet-600 px-3.5 py-1.5 text-xs font-medium text-white hover:from-indigo-600 hover:to-violet-700 shadow-sm flex items-center gap-1.5">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+            New Campaign
+          </Link>
+        </div>
       </div>
+
+      {refreshResult && (
+        <div className="mb-4 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-[11px] text-emerald-700">
+          Scraped {refreshResult.scraped_count} · matched {refreshResult.matched_count} · {refreshResult.new_snapshots} new snapshot{refreshResult.new_snapshots === 1 ? "" : "s"} · {refreshResult.new_insights} new insight{refreshResult.new_insights === 1 ? "" : "s"}
+          {refreshResult.skipped_already_scraped_today ? ` · ${refreshResult.skipped_already_scraped_today} skipped (already scraped today)` : ""}
+        </div>
+      )}
+      {refreshError && (
+        <div className="mb-4 rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-[11px] text-rose-700">
+          {refreshError}
+        </div>
+      )}
 
       {/* ROW 1 — Engagement chart (hero) */}
       <div className="rounded-xl border border-indigo-100/50 bg-white shadow-sm mb-5">
