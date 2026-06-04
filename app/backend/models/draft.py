@@ -14,6 +14,7 @@ class Draft(Base, IdMixin, TimestampMixin):
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String, nullable=False)
     primary_text: Mapped[str] = mapped_column(Text, nullable=False)
+    original_generated_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     alternate_hooks_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     grounding_summary: Mapped[str] = mapped_column(Text, nullable=False)
     rationale: Mapped[str] = mapped_column(Text, nullable=False)

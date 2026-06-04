@@ -120,6 +120,13 @@ def get_personality_evolution(db: Session = Depends(get_db)):
     return get_evolution_log(db)
 
 
+@router.get("/edit-learning")
+def get_edit_learning(db: Session = Depends(get_db)):
+    """Return per-edit-type counts captured from user edits at approve-time."""
+    from app.backend.services.edit_learning_service import list_edit_type_counts
+    return {"edit_types": list_edit_type_counts(db)}
+
+
 @router.get("/env-config")
 def get_env_config():
     """Return which .env keys are configured (masked values, never raw secrets).

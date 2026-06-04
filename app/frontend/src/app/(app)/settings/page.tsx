@@ -49,6 +49,7 @@ export default function SettingsPage() {
   const [editingLearned, setEditingLearned] = useState(false);
   const [savingLearned, setSavingLearned] = useState(false);
   const [learnedSaved, setLearnedSaved] = useState(false);
+  const [editTypes, setEditTypes] = useState<Array<{ edit_type: string; count: number; promoted: boolean; threshold: number }>>([]);
   const [validating, setValidating] = useState(false);
   const [validated, setValidated] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +59,9 @@ export default function SettingsPage() {
     api.get<PersonalityProfile>("/api/setup/personality").then((p) => {
       setProfile(p); setAuthorName(p.author_name); setPersonalityPrompt(p.personality_prompt); setContentGuardrails(p.content_guardrails); setLearnedContext(p.learned_context || "");
     }).catch(() => {});
+    api.get<{ edit_types: Array<{ edit_type: string; count: number; promoted: boolean; threshold: number }> }>("/api/setup/edit-learning")
+      .then((d) => setEditTypes(d.edit_types || []))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -409,6 +413,33 @@ export default function SettingsPage() {
             )}
           </div>
         )}
+      </div>
+
+      {/* Edit corrections — what the user has been editing in drafts at approve time */}
+      <div className="rounded-xl border border-violet-200/50 bg-violet-50/10 shadow-sm mb-4">
+        <div className="px-4 py-3 border-b border-violet-100/50">
+          <h2 className="text-xs font-semibold text-violet-800 uppercase tracking-wide">Edit Corrections</h2>
+          <p className="text-[9px] text-violet-600">Captured when you edit a draft before approval. Once a pattern repeats {editTypes[0]?.threshold ?? 3} times, it&apos;s auto-promoted to Learned Context.</p>
+        </div>
+        <div className="p-4">
+          {editTypes.length === 0 ? (
+            <p className="text-[10px] text-violet-600 italic">No edits captured yet. Edit a draft text before approving it and the system will start learning.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {editTypes.map((et) => (
+                <div key={et.edit_type} className="flex items-center justify-between rounded-lg bg-white border border-violet-100 px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <code className="text-[10px] font-mono text-violet-700">{et.edit_type}</code>
+                    {et.promoted && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-medium">promoted</span>
+                    )}
+                  </div>
+                  <span className="text-[10px] font-medium text-gray-700">{et.count} / {et.threshold}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <p className="text-[10px] text-gray-300 mt-4">PostPilot v1.0</p>

@@ -114,6 +114,13 @@ def approve_draft(db: Session, draft_id: int) -> dict:
         source_surface="web",
     )
     db.add(action)
+    db.flush()
+
+    try:
+        from app.backend.services.edit_learning_service import capture_edit_on_approve
+        capture_edit_on_approve(db, draft.id, draft.original_generated_text, draft.primary_text)
+    except Exception as exc:
+        logger.warning("Edit capture failed for draft %d: %s", draft_id, exc)
 
     # Calculate next posting slot based on campaign window + min gap
     scheduled_at = None
@@ -317,8 +324,11 @@ Polish this post now."""
     new_text = result.get("primary_text", draft.primary_text)
     changes = result.get("changes_made", "")
 
-    # Update the draft
+    # Update the draft. Reset the baseline so user edits after a polish
+    # diff against the polish output, not the original generation —
+    # otherwise edit_learning would attribute LLM-driven changes to the user.
     draft.primary_text = new_text
+    draft.original_generated_text = new_text
     draft.version += 1
     db.commit()
 
@@ -474,6 +484,7 @@ Write the LinkedIn post now."""
         version=1,
         status="pending_review",
         primary_text=draft_data["primary_text"],
+        original_generated_text=draft_data["primary_text"],
         alternate_hooks_json="[]",
         grounding_summary=draft_data.get("grounding_summary", ""),
         rationale=draft_data.get("rationale", ""),

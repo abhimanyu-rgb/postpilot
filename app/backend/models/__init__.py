@@ -4,6 +4,7 @@ from app.backend.models.campaign import Campaign
 from app.backend.models.candidate_opportunity import CandidateOpportunity
 from app.backend.models.daily_run import DailyRun
 from app.backend.models.draft import Draft
+from app.backend.models.draft_edit import DraftEdit
 from app.backend.models.historical_linkedin_artifact import HistoricalLinkedInArtifact
 from app.backend.models.integration_config import IntegrationConfig
 from app.backend.models.personality_profile import PersonalityProfile
@@ -21,6 +22,7 @@ __all__ = [
     "CandidateOpportunity",
     "DailyRun",
     "Draft",
+    "DraftEdit",
     "HistoricalLinkedInArtifact",
     "IntegrationConfig",
     "PersonalityProfile",

@@ -129,6 +129,7 @@ Return ONLY a JSON object:
         version=1,
         status="pending_review",
         primary_text=draft_data["primary_text"],
+        original_generated_text=draft_data["primary_text"],
         alternate_hooks_json="[]",
         grounding_summary=draft_data.get("grounding_summary", "User-initiated topic"),
         rationale=draft_data.get("rationale", ""),
