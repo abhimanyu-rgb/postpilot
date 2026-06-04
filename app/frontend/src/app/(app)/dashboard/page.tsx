@@ -12,8 +12,8 @@ interface TokenStats {
 }
 interface PublishQueueStatus { posts_today: number; daily_budget: number; remaining: number; approved_waiting: number; queued_for_publish: number; paused: boolean; }
 
-interface SparklinePoint { week_start: string; avg_reactions: number; posts: number; }
-interface TopPost { draft_id: number; reactions: number; published_at: string | null; first_line: string; }
+interface SparklinePoint { week_start: string; week_end: string; label: string; avg_reactions: number; posts: number; scored_posts: number; total_reactions: number; }
+interface TopPost { draft_id: number; reactions: number | null; published_at: string | null; first_line: string; }
 interface DashboardKpis {
   reach: {
     last_7d: { total_reactions: number; posts: number; delta_pct_vs_prior_7d: number | null };
@@ -56,28 +56,52 @@ function DeltaBadge({ pct }: { pct: number | null }) {
   );
 }
 
-function Sparkline({ points }: { points: SparklinePoint[] }) {
+function EngagementChart({ points }: { points: SparklinePoint[] }) {
   if (points.length === 0) return null;
   const max = Math.max(1, ...points.map((p) => p.avg_reactions));
-  const w = 220;
-  const h = 56;
-  const step = w / Math.max(1, points.length - 1);
-  const coords = points.map((p, i) => [i * step, h - (p.avg_reactions / max) * (h - 6) - 3] as [number, number]);
+  const W = 600;
+  const H = 180;
+  const padL = 28;
+  const padR = 12;
+  const padT = 12;
+  const padB = 28;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+  const step = innerW / Math.max(1, points.length - 1);
+  const coords = points.map((p, i) => [padL + i * step, padT + innerH - (p.avg_reactions / max) * innerH] as [number, number]);
   const pathD = coords.map(([x, y], i) => (i === 0 ? `M ${x} ${y}` : `L ${x} ${y}`)).join(" ");
-  const areaD = `${pathD} L ${w} ${h} L 0 ${h} Z`;
+  const areaD = `${pathD} L ${padL + innerW} ${padT + innerH} L ${padL} ${padT + innerH} Z`;
+  const yTicks = [0, 0.5, 1].map((t) => ({ y: padT + innerH - t * innerH, label: Math.round(max * t) }));
+
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-14">
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-44">
       <defs>
-        <linearGradient id="sparkGrad" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.25" />
+        <linearGradient id="engGrad" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.3" />
           <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
         </linearGradient>
       </defs>
-      <path d={areaD} fill="url(#sparkGrad)" />
-      <path d={pathD} fill="none" stroke="#8b5cf6" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
-      {coords.map(([x, y], i) => (
-        <circle key={i} cx={x} cy={y} r={i === coords.length - 1 ? 2.5 : 1.5} fill="#8b5cf6" />
+      {yTicks.map((t, i) => (
+        <g key={i}>
+          <line x1={padL} y1={t.y} x2={padL + innerW} y2={t.y} stroke="#f3f4f6" strokeWidth="1" />
+          <text x={padL - 6} y={t.y + 3} textAnchor="end" fontSize="9" fill="#9ca3af">{t.label}</text>
+        </g>
       ))}
+      <path d={areaD} fill="url(#engGrad)" />
+      <path d={pathD} fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      {coords.map(([x, y], i) => (
+        <g key={i}>
+          <circle cx={x} cy={y} r={i === coords.length - 1 ? 3.5 : 2.5} fill="#8b5cf6" />
+          <title>{`${points[i].label}: avg ${points[i].avg_reactions} (${points[i].scored_posts}/${points[i].posts} scored)`}</title>
+        </g>
+      ))}
+      {points.map((p, i) => {
+        const x = padL + i * step;
+        const short = p.label.split("–")[0];
+        return (
+          <text key={i} x={x} y={H - 8} textAnchor="middle" fontSize="9" fill="#9ca3af">{short}</text>
+        );
+      })}
     </svg>
   );
 }
@@ -112,7 +136,8 @@ export default function DashboardPage() {
       <div className="p-8">
         <div className="animate-pulse space-y-4">
           <div className="h-8 w-48 bg-gray-200 rounded-lg" />
-          <div className="grid grid-cols-3 gap-4"><div className="h-28 bg-gray-100 rounded-xl" /><div className="h-28 bg-gray-100 rounded-xl" /><div className="h-28 bg-gray-100 rounded-xl" /></div>
+          <div className="h-48 bg-gray-100 rounded-xl" />
+          <div className="grid grid-cols-5 gap-3"><div className="h-24 bg-gray-100 rounded-xl" /><div className="h-24 bg-gray-100 rounded-xl" /><div className="h-24 bg-gray-100 rounded-xl" /><div className="h-24 bg-gray-100 rounded-xl" /><div className="h-24 bg-gray-100 rounded-xl" /></div>
         </div>
       </div>
     );
@@ -127,6 +152,8 @@ export default function DashboardPage() {
   const topPost = kpis?.reach.top_post_this_week;
   const eq = kpis?.engagement_quality;
   const pipe = kpis?.pipeline;
+  const sparkline = eq?.weekly_sparkline ?? [];
+  const latestWeek = sparkline.length ? sparkline[sparkline.length - 1] : null;
 
   return (
     <div className="p-6 max-w-[1100px]">
@@ -141,10 +168,32 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      {/* ROW 1 — Reach & Growth */}
-      <h2 className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Reach &amp; Growth</h2>
+      {/* ROW 1 — Engagement chart (hero) */}
+      <div className="rounded-xl border border-indigo-100/50 bg-white shadow-sm mb-5">
+        <div className="px-5 pt-4 pb-2 flex items-center justify-between">
+          <div>
+            <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Weekly engagement</h2>
+            <p className="text-[10px] text-gray-400 mt-0.5">Avg reactions per post · last 8 weeks</p>
+          </div>
+          {latestWeek && (
+            <div className="text-right">
+              <p className="text-[10px] text-gray-400">{latestWeek.label}</p>
+              <p className="text-lg font-bold text-violet-600">{latestWeek.avg_reactions}<span className="text-[10px] font-normal text-gray-400 ml-1">avg</span></p>
+            </div>
+          )}
+        </div>
+        <div className="px-2 pb-3">
+          {sparkline.length > 0 ? (
+            <EngagementChart points={sparkline} />
+          ) : (
+            <p className="text-xs text-gray-400 italic px-4 py-8 text-center">Not enough data yet</p>
+          )}
+        </div>
+      </div>
+
+      {/* ROW 2 — Reach summary (3 stat cards) */}
+      <h2 className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Reach</h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
-        {/* Reactions last 7d */}
         <div className="rounded-xl border border-indigo-100/50 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between mb-2">
             <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Reactions · last 7d</p>
@@ -154,7 +203,6 @@ export default function DashboardPage() {
           <p className="text-[10px] text-gray-400 mt-1">across {reach7?.posts ?? 0} post{reach7?.posts === 1 ? "" : "s"}</p>
         </div>
 
-        {/* Avg reactions last 30d */}
         <div className="rounded-xl border border-indigo-100/50 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between mb-2">
             <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Avg per post · last 30d</p>
@@ -164,11 +212,14 @@ export default function DashboardPage() {
           <p className="text-[10px] text-gray-400 mt-1">from {reach30?.posts ?? 0} post{reach30?.posts === 1 ? "" : "s"}</p>
         </div>
 
-        {/* Top post this week */}
         <Link href="/analytics" className="rounded-xl border border-indigo-100/50 bg-white p-4 shadow-sm hover:border-violet-200 hover:shadow-md block">
           <div className="flex items-center justify-between mb-2">
             <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Top post · last 7d</p>
-            {topPost && <span className="text-[10px] font-bold text-violet-600">{topPost.reactions}</span>}
+            {topPost && (
+              topPost.reactions !== null
+                ? <span className="text-[10px] font-bold text-violet-600">{topPost.reactions}</span>
+                : <span className="text-[9px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded font-medium">pending scrape</span>
+            )}
           </div>
           {topPost ? (
             <p className="text-xs text-gray-700 line-clamp-3 leading-snug">{topPost.first_line || "—"}</p>
@@ -178,26 +229,126 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      {/* ROW 2 — Engagement Quality */}
-      <h2 className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Engagement Quality</h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
-        {/* Sparkline */}
-        <div className="rounded-xl border border-indigo-100/50 bg-white p-4 shadow-sm md:col-span-2">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Weekly avg reactions · last 8 weeks</p>
-            {eq?.weekly_sparkline && eq.weekly_sparkline.length > 0 && (
-              <p className="text-[10px] text-gray-500">latest: <span className="font-semibold text-gray-700">{eq.weekly_sparkline[eq.weekly_sparkline.length - 1].avg_reactions}</span></p>
-            )}
+      {/* ROW 3 — Combined operations row: Campaigns, Published, Pending, Approval, Today/Pause */}
+      <h2 className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Operations</h2>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
+        {/* Campaigns */}
+        <Link href="/campaigns" className="rounded-xl border border-indigo-100/50 bg-white p-3.5 shadow-sm block hover:border-violet-200 hover:shadow-md">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-[9px] text-gray-400 uppercase tracking-wide font-semibold">Campaigns</p>
+            {atLimit && <span className="text-[8px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium">LIMIT</span>}
           </div>
-          {eq?.weekly_sparkline && eq.weekly_sparkline.length > 0 ? (
-            <Sparkline points={eq.weekly_sparkline} />
+          <p className={`text-xl font-bold ${atLimit ? "text-amber-600" : "text-gray-900"}`}>{activeCount}<span className="text-xs font-normal text-gray-300">/{maxActive}</span></p>
+          <p className="text-[9px] text-gray-400 mt-0.5">active</p>
+        </Link>
+
+        {/* Posts published */}
+        <Link href="/history" className="rounded-xl border border-indigo-100/50 bg-white p-3.5 shadow-sm block hover:border-violet-200 hover:shadow-md">
+          <p className="text-[9px] text-gray-400 uppercase tracking-wide font-semibold mb-1">Published</p>
+          <p className="text-xl font-bold text-gray-900">{pipe?.published_7d ?? 0}</p>
+          <p className="text-[9px] text-gray-400 mt-0.5">7d · {pipe?.published_30d ?? 0} in 30d</p>
+        </Link>
+
+        {/* Pending review */}
+        <Link href="/queue" className="rounded-xl border border-indigo-100/50 bg-white p-3.5 shadow-sm block hover:border-violet-200 hover:shadow-md">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-[9px] text-gray-400 uppercase tracking-wide font-semibold">Pending review</p>
+            {(pipe?.pending_review ?? 0) > 0 && <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse" />}
+          </div>
+          <p className="text-xl font-bold text-gray-900">{pipe?.pending_review ?? 0}</p>
+          <p className="text-[9px] text-gray-400 mt-0.5">drafts waiting</p>
+        </Link>
+
+        {/* Approval rate */}
+        <div className="rounded-xl border border-indigo-100/50 bg-white p-3.5 shadow-sm">
+          <p className="text-[9px] text-gray-400 uppercase tracking-wide font-semibold mb-1">Approval rate</p>
+          {pipe?.approval_rate_30d_pct !== null && pipe?.approval_rate_30d_pct !== undefined ? (
+            <>
+              <p className="text-xl font-bold text-gray-900">{pipe.approval_rate_30d_pct}%</p>
+              <p className="text-[9px] text-gray-400 mt-0.5">30d · {pipe.approved_30d}✓ {pipe.rejected_30d}✗</p>
+            </>
           ) : (
-            <p className="text-xs text-gray-400 italic">Not enough data yet</p>
+            <p className="text-[10px] text-gray-400 italic">No activity yet</p>
           )}
         </div>
 
-        {/* Above own median + Learned signals stacked */}
+        {/* Today / Pause */}
+        {pq && (
+          <div className={`rounded-xl border ${pq.paused ? "border-rose-200 bg-rose-50/30" : "border-indigo-100/50 bg-white"} p-3.5 shadow-sm`}>
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-[9px] text-gray-400 uppercase tracking-wide font-semibold">{pq.paused ? "Paused" : "Today"}</p>
+              <button
+                onClick={async () => {
+                  if (!pq.paused && !confirm("Pause all scheduled publishing? Queued posts will stop going out until you resume.")) return;
+                  await api.post(pq.paused ? "/api/setup/publish-queue/resume" : "/api/setup/publish-queue/pause");
+                  const updated = await api.get<PublishQueueStatus>("/api/setup/publish-queue");
+                  setPublishQueue(updated);
+                }}
+                title={pq.paused ? "Resume auto-publishing" : "Pause all scheduled publishing"}
+                className={`rounded px-1.5 py-0.5 text-[9px] font-semibold ${
+                  pq.paused
+                    ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                    : "bg-rose-100 text-rose-700 hover:bg-rose-200 border border-rose-200"
+                }`}
+              >
+                {pq.paused ? "GO LIVE" : "PAUSE"}
+              </button>
+            </div>
+            <p className="text-xl font-bold text-gray-900">{pq.posts_today}<span className="text-xs font-normal text-gray-300">/{pq.daily_budget}</span></p>
+            <p className="text-[9px] text-gray-400 mt-0.5">{pq.paused ? "publishing stopped" : `${pq.remaining} slot${pq.remaining !== 1 ? "s" : ""} left`}</p>
+          </div>
+        )}
+      </div>
+
+      {/* ROW 4 — Cost & Learning */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {/* Token usage with breakdown (restored from previous design) */}
+        {tokenStats && (
+          <div className="rounded-xl border border-indigo-100/50 bg-white shadow-sm md:col-span-2">
+            <div className="px-4 py-3 border-b border-indigo-50">
+              <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Token Usage</h2>
+            </div>
+            <div className="p-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                <div>
+                  <p className="text-[10px] text-gray-400">This week</p>
+                  <p className="text-lg font-bold text-gray-900">{fmt(tokenStats.week.total_tokens)}</p>
+                  <p className="text-[10px] text-gray-400">${tokenStats.week.estimated_cost_usd.toFixed(2)}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-gray-400">This month</p>
+                  <p className="text-lg font-bold text-gray-900">{fmt(tokenStats.month.total_tokens)}</p>
+                  <p className="text-[10px] text-gray-400">${tokenStats.month.estimated_cost_usd.toFixed(2)}</p>
+                </div>
+              </div>
+              {Object.keys(tokenStats.month.by_service).length > 0 && (
+                <div className="space-y-1.5">
+                  {Object.entries(tokenStats.month.by_service).map(([service, tokens]) => {
+                    const total = tokenStats.month.total_tokens || 1;
+                    const pct = Math.round((tokens / total) * 100);
+                    return (
+                      <div key={service} className="flex items-center gap-2">
+                        <span className="text-[9px] text-gray-400 w-20 truncate capitalize">{service.replace(/_/g, " ")}</span>
+                        <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-gradient-to-r from-indigo-400 to-violet-500 rounded-full" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="text-[9px] text-gray-400 w-8 text-right">{pct}%</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Learned signals + above-own-median stacked */}
         <div className="space-y-3">
+          <Link href="/settings" className="rounded-xl border border-indigo-100/50 bg-white p-4 shadow-sm block hover:border-violet-200 hover:shadow-md">
+            <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1">Learned signals active</p>
+            <p className="text-2xl font-bold text-gray-900">{eq?.learned_signals_active.total ?? 0}</p>
+            <p className="text-[10px] text-gray-400 mt-0.5">{eq?.learned_signals_active.promoted_insights ?? 0} insights · {eq?.learned_signals_active.promoted_edit_types ?? 0} edit patterns</p>
+          </Link>
           <div className="rounded-xl border border-indigo-100/50 bg-white p-4 shadow-sm">
             <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1">Above own median · 30d</p>
             {eq?.pct_above_own_median_30d !== null && eq?.pct_above_own_median_30d !== undefined ? (
@@ -208,131 +359,10 @@ export default function DashboardPage() {
                 </div>
               </>
             ) : (
-              <p className="text-[10px] text-gray-400 italic">Need 4+ posts in 30d</p>
+              <p className="text-[10px] text-gray-400 italic">Need 4+ scored posts in 30d</p>
             )}
           </div>
-          <Link href="/settings" className="rounded-xl border border-indigo-100/50 bg-white p-4 shadow-sm block hover:border-violet-200 hover:shadow-md">
-            <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1">Learned signals active</p>
-            <p className="text-2xl font-bold text-gray-900">{eq?.learned_signals_active.total ?? 0}</p>
-            <p className="text-[10px] text-gray-400 mt-0.5">{eq?.learned_signals_active.promoted_insights ?? 0} insights · {eq?.learned_signals_active.promoted_edit_types ?? 0} edit patterns</p>
-          </Link>
         </div>
-      </div>
-
-      {/* ROW 3 — Pipeline Health */}
-      <h2 className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Pipeline Health</h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
-        <Link href="/history" className="rounded-xl border border-indigo-100/50 bg-white p-4 shadow-sm block hover:border-violet-200 hover:shadow-md">
-          <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1">Posts published</p>
-          <div className="flex items-baseline gap-3">
-            <div>
-              <p className="text-2xl font-bold text-gray-900">{pipe?.published_7d ?? 0}</p>
-              <p className="text-[10px] text-gray-400">last 7d</p>
-            </div>
-            <div className="border-l border-gray-100 pl-3">
-              <p className="text-lg font-semibold text-gray-600">{pipe?.published_30d ?? 0}</p>
-              <p className="text-[10px] text-gray-400">last 30d</p>
-            </div>
-          </div>
-        </Link>
-        <div className="rounded-xl border border-indigo-100/50 bg-white p-4 shadow-sm">
-          <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1">Approval rate · 30d</p>
-          {pipe?.approval_rate_30d_pct !== null && pipe?.approval_rate_30d_pct !== undefined ? (
-            <>
-              <p className="text-2xl font-bold text-gray-900">{pipe.approval_rate_30d_pct}%</p>
-              <p className="text-[10px] text-gray-400 mt-0.5">{pipe.approved_30d} approved · {pipe.rejected_30d} rejected</p>
-            </>
-          ) : (
-            <p className="text-[10px] text-gray-400 italic">No approval activity yet</p>
-          )}
-        </div>
-        <Link href="/queue" className="rounded-xl border border-indigo-100/50 bg-white p-4 shadow-sm block hover:border-violet-200 hover:shadow-md">
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Pending review</p>
-            {(pipe?.pending_review ?? 0) > 0 && <span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse" />}
-          </div>
-          <p className="text-2xl font-bold text-gray-900">{pipe?.pending_review ?? 0}</p>
-          <p className="text-[10px] text-gray-400 mt-0.5">drafts waiting</p>
-        </Link>
-      </div>
-
-      {/* ROW 4 — Cost & System */}
-      <h2 className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Cost &amp; System</h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {/* Campaigns */}
-        <Link href="/campaigns" className="rounded-xl border border-indigo-100/50 bg-white p-4 shadow-sm block hover:border-violet-200 hover:shadow-md">
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Campaigns</p>
-            {atLimit && <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium">LIMIT</span>}
-          </div>
-          <p className={`text-2xl font-bold ${atLimit ? "text-amber-600" : "text-gray-900"}`}>{activeCount}<span className="text-sm font-normal text-gray-300">/{maxActive}</span></p>
-          <p className="text-[10px] text-gray-400 mt-0.5">active</p>
-        </Link>
-
-        {/* Cost */}
-        {tokenStats ? (
-          <div className="rounded-xl border border-indigo-100/50 bg-white p-4 shadow-sm">
-            <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1">Cost · this month</p>
-            <p className="text-2xl font-bold text-gray-900">${tokenStats.month.estimated_cost_usd.toFixed(2)}</p>
-            <p className="text-[10px] text-gray-400 mt-0.5">{fmt(tokenStats.month.total_tokens)} tokens · ${tokenStats.week.estimated_cost_usd.toFixed(2)} this week</p>
-          </div>
-        ) : (
-          <div className="rounded-xl border border-indigo-100/50 bg-white p-4 shadow-sm">
-            <p className="text-[10px] text-gray-400 italic">Cost data unavailable</p>
-          </div>
-        )}
-
-        {/* Publish queue + pause switch */}
-        {pq && (
-          <div className={`rounded-xl border ${pq.paused ? "border-rose-200 bg-rose-50/30" : "border-indigo-100/50 bg-white"} p-4 shadow-sm`}>
-            <div className="flex items-center gap-3">
-              <div className="relative w-12 h-12 shrink-0">
-                <svg className="w-12 h-12 -rotate-90" viewBox="0 0 36 36">
-                  <circle cx="18" cy="18" r="14" fill="none" stroke="#f3f4f6" strokeWidth="3" />
-                  <circle cx="18" cy="18" r="14" fill="none"
-                    stroke={pq.paused ? "#ef4444" : pq.posts_today >= pq.daily_budget ? "#f59e0b" : "#8b5cf6"}
-                    strokeWidth="3" strokeLinecap="round"
-                    strokeDasharray={`${(pq.posts_today / Math.max(1, pq.daily_budget)) * 88} 88`} />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  {pq.paused ? (
-                    <svg className="w-4 h-4 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M10 9v6m4-6v6" /></svg>
-                  ) : (
-                    <span className="text-xs font-bold text-gray-900">{pq.posts_today}</span>
-                  )}
-                </div>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">{pq.paused ? "Paused" : "Today"}</p>
-                {pq.paused ? (
-                  <p className="text-[10px] text-rose-600 font-medium">Publishing stopped</p>
-                ) : (
-                  <p className="text-xs text-gray-600">{pq.remaining} slot{pq.remaining !== 1 ? "s" : ""} left</p>
-                )}
-              </div>
-              <button
-                onClick={async () => {
-                  if (!pq.paused && !confirm("Pause all scheduled publishing? Queued posts will stop going out until you resume.")) return;
-                  await api.post(pq.paused ? "/api/setup/publish-queue/resume" : "/api/setup/publish-queue/pause");
-                  const updated = await api.get<PublishQueueStatus>("/api/setup/publish-queue");
-                  setPublishQueue(updated);
-                }}
-                title={pq.paused ? "Resume auto-publishing" : "Pause all scheduled publishing"}
-                className={`rounded-lg px-2.5 py-1.5 text-[10px] font-semibold flex items-center gap-1.5 shrink-0 ${
-                  pq.paused
-                    ? "bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
-                    : "bg-rose-100 text-rose-700 hover:bg-rose-200 border border-rose-200"
-                }`}
-              >
-                {pq.paused ? (
-                  <><span className="w-2 h-2 rounded-full bg-white animate-pulse" />GO LIVE</>
-                ) : (
-                  <><span className="w-2 h-2 rounded-full bg-rose-500" />PAUSE</>
-                )}
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
