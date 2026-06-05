@@ -146,62 +146,93 @@ Posts (most recent first):
         logger.error("Voice snapshot update failed: %s", e)
 
 
-def check_drift(db: Session, draft_text: str) -> dict | None:
-    """Check if a draft contradicts or drifts from recent published positions.
-
-    Returns None if no drift detected, or a dict with:
-    {
-        "has_drift": True,
-        "severity": "low" | "medium" | "high",
-        "explanation": "This draft takes position X, but you recently said Y..."
+def _recent_post_blocks(db: Session, days: int = 30, snippet_chars: int = 280) -> list[str]:
+    """Return formatted [YYYY-MM-DD] snippet blocks for every published post in the
+    last `days`. Shared input source for both drift and repetition checks so the two
+    audits see identical context."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    recent_posts = (
+        db.query(PublishedPost)
+        .filter(PublishedPost.published_at >= cutoff)
+        .order_by(PublishedPost.published_at.desc())
+        .all()
+    )
+    if not recent_posts:
+        return []
+    draft_ids = [p.draft_id for p in recent_posts]
+    drafts_by_id = {
+        d.id: d for d in db.query(Draft).filter(Draft.id.in_(draft_ids)).all()
     }
-    """
-    config = db.query(IntegrationConfig).filter(IntegrationConfig.id == 1).first()
-    if not config or not config.voice_snapshot:
-        return None
+    blocks: list[str] = []
+    for pp in recent_posts:
+        d = drafts_by_id.get(pp.draft_id)
+        if d and d.primary_text:
+            date_str = pp.published_at.date().isoformat() if pp.published_at else "?"
+            blocks.append(f"[{date_str}] {d.primary_text[:snippet_chars]}")
+    return blocks
 
+
+def _run_audit_call(prompt: str, service_label: str) -> dict | None:
+    """Shared Haiku call for drift/repetition. Returns parsed JSON or None on failure."""
     try:
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=300,
-            messages=[{
-                "role": "user",
-                "content": f"""Compare this new draft against the author's recent published positions. Does the draft contradict, significantly deviate from, or undermine any positions the author has publicly taken?
-
-RECENT PUBLISHED POSITIONS:
-{config.voice_snapshot}
-
-NEW DRAFT:
-{draft_text[:500]}
-
-Respond with ONLY a JSON object:
-- If no meaningful drift: {{"has_drift": false}}
-- If drift detected: {{"has_drift": true, "severity": "low|medium|high", "explanation": "brief explanation of the inconsistency"}}
-
-Only flag genuine contradictions or significant stance changes. Topic variety across campaigns is normal and NOT drift. Drift means saying opposite things about the same topic.""",
-            }],
+            messages=[{"role": "user", "content": prompt}],
         )
+        from app.backend.services.token_tracker import track_usage
+        track_usage(response, service=service_label)
 
         text = response.content[0].text.strip()
         if text.startswith("```"):
             text = "\n".join(text.split("\n")[1:])
             if text.endswith("```"):
                 text = text[:-3]
-
-        result = json.loads(text)
-
-        from app.backend.services.token_tracker import track_usage
-        track_usage(response, service="drift_check")
-
-        if result.get("has_drift"):
-            return result
-        return None
-
+        return json.loads(text)
     except Exception as e:
-        logger.debug("Drift check failed: %s", e)
+        logger.debug("%s failed: %s", service_label, e)
         return None
+
+
+def check_drift(db: Session, draft_text: str) -> dict | None:
+    """Check if a draft contradicts recent published positions.
+
+    Returns None if no drift, or:
+    {
+        "has_drift": True,
+        "severity": "low" | "medium" | "high",
+        "explanation": "<one sentence: the contradiction + a brief quote from the prior post>",
+    }
+    """
+    blocks = _recent_post_blocks(db)
+    if len(blocks) < 2:
+        return None  # Need at least 2 prior posts for drift to be meaningful
+
+    prior_block = "\n---\n".join(blocks)
+    prompt = f"""You audit a LinkedIn author's drafts for voice drift — contradictions or significant stance reversals against positions the author has publicly taken in recent posts.
+
+NEW DRAFT:
+{draft_text[:600]}
+
+AUTHOR'S RECENT POSTS (last 30 days, newest first):
+{prior_block}
+
+Respond with ONLY a JSON object:
+- If no meaningful drift: {{"has_drift": false}}
+- If drift detected: {{"has_drift": true, "severity": "low|medium|high", "explanation": "<one sentence: the contradiction + a brief quote from the prior post>"}}
+
+Severity guide:
+- low: subtle softening or hedging of a previously firm position
+- medium: meaningful stance shift on the same topic
+- high: direct contradiction — saying the opposite of what was said before
+
+Only flag genuine contradictions or significant stance changes. Topic variety across campaigns is normal and NOT drift."""
+
+    result = _run_audit_call(prompt, "drift_check")
+    if result and result.get("has_drift"):
+        return result
+    return None
 
 
 def check_repetition(db: Session, draft_text: str) -> dict | None:
@@ -218,45 +249,12 @@ def check_repetition(db: Session, draft_text: str) -> dict | None:
         "similar_count": 3,
     }
     """
-    config = db.query(IntegrationConfig).filter(IntegrationConfig.id == 1).first()
-    if not config or not config.voice_snapshot:
-        return None
-
-    # Pull every published post in the last 30 days — we need actual texts, not just
-    # the snapshot, so we can count how many times a point was made and cite specifics.
-    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
-    recent_posts = (
-        db.query(PublishedPost)
-        .filter(PublishedPost.published_at >= cutoff)
-        .order_by(PublishedPost.published_at.desc())
-        .all()
-    )
-    if len(recent_posts) < 2:
+    blocks = _recent_post_blocks(db)
+    if len(blocks) < 2:
         return None  # Need at least 2 prior posts for repetition to be meaningful
 
-    draft_ids = [p.draft_id for p in recent_posts]
-    drafts_by_id = {
-        d.id: d for d in db.query(Draft).filter(Draft.id.in_(draft_ids)).all()
-    }
-    blocks = []
-    for pp in recent_posts:
-        d = drafts_by_id.get(pp.draft_id)
-        if d and d.primary_text:
-            date_str = pp.published_at.date().isoformat() if pp.published_at else "?"
-            blocks.append(f"[{date_str}] {d.primary_text[:280]}")
-    if len(blocks) < 2:
-        return None
-
-    try:
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        prior_block = "\n---\n".join(blocks)
-
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=300,
-            messages=[{
-                "role": "user",
-                "content": f"""You audit a LinkedIn author's drafts for over-repetition. A point is over-repeated if the same core argument, framing, or insight has been made in multiple recent posts and showing up again risks fatiguing the audience.
+    prior_block = "\n---\n".join(blocks)
+    prompt = f"""You audit a LinkedIn author's drafts for over-repetition. A point is over-repeated if the same core argument, framing, or insight has been made in multiple recent posts and showing up again risks fatiguing the audience.
 
 NEW DRAFT:
 {draft_text[:600]}
@@ -273,27 +271,12 @@ Severity guide:
 - medium: same point, slightly different wording, appeared 2 times before
 - high: nearly identical argument, appeared 3+ times — strong fatigue risk
 
-Topic variety across campaigns is normal — only flag when the SAME claim/insight is being recycled. Cross-campaign repetition counts too.""",
-            }],
-        )
+Topic variety across campaigns is normal — only flag when the SAME claim/insight is being recycled. Cross-campaign repetition counts too."""
 
-        text = response.content[0].text.strip()
-        if text.startswith("```"):
-            text = "\n".join(text.split("\n")[1:])
-            if text.endswith("```"):
-                text = text[:-3]
-        result = json.loads(text)
-
-        from app.backend.services.token_tracker import track_usage
-        track_usage(response, service="repetition_check")
-
-        if result.get("has_repetition"):
-            return result
-        return None
-
-    except Exception as e:
-        logger.debug("Repetition check failed: %s", e)
-        return None
+    result = _run_audit_call(prompt, "repetition_check")
+    if result and result.get("has_repetition"):
+        return result
+    return None
 
 
 def _summarize_engagement_patterns(db: Session, top_n: int = 5) -> dict | None:
