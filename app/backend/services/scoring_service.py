@@ -18,18 +18,24 @@ logger = logging.getLogger("orchestrator")
 SCORING_PROMPT_VERSION = "v1.0"
 
 
-def _build_scoring_system_prompt(
+def _build_scoring_system_blocks(
     campaign: Campaign, topics: list[str], feedback_context: str = ""
-) -> str:
+) -> tuple[str, str]:
+    """Return (stable_block, campaign_block).
+
+    The stable block is identical across every scoring call regardless of campaign,
+    so it caches reliably. The campaign block holds campaign-specific data — it
+    rebuilds per call but is small enough that cache misses on it don't matter.
+    """
     from app.backend.services.personality_service import (
         get_content_guardrails,
         get_personality_prompt,
     )
 
-    feedback_section = f"\n{feedback_context}\n" if feedback_context else ""
     guardrails = get_content_guardrails()
     personality = get_personality_prompt()
-    return f"""You are a LinkedIn content strategist. Your job is to analyze news signals and identify compelling content opportunities for a LinkedIn thought leader.
+
+    stable_block = f"""You are a LinkedIn content strategist. Your job is to analyze news signals and identify compelling content opportunities for a LinkedIn thought leader.
 
 ## Priority Order (follow strictly)
 1. Content guardrails (never violate)
@@ -39,11 +45,6 @@ def _build_scoring_system_prompt(
 
 {guardrails}
 
-## Campaign Context
-- **Topics of expertise**: {", ".join(topics)}
-- **Persona**: {campaign.persona}
-- **Tone**: {campaign.tone}
-{feedback_section}
 {personality}
 
 ## Your Task
@@ -75,6 +76,15 @@ Analyze the provided news signals and identify content opportunities — angles 
 ]
 ```"""
 
+    feedback_section = f"\n{feedback_context}\n" if feedback_context else ""
+    campaign_block = f"""## Campaign Context
+- **Topics of expertise**: {", ".join(topics)}
+- **Persona**: {campaign.persona}
+- **Tone**: {campaign.tone}
+{feedback_section}"""
+
+    return stable_block, campaign_block
+
 
 def _build_scoring_user_prompt(
     signals: list[SourceSignal],
@@ -91,7 +101,7 @@ def _build_scoring_user_prompt(
         }
         # Include extracted article excerpt when available
         if signal.id in enriched:
-            entry["excerpt"] = enriched[signal.id][:800]
+            entry["excerpt"] = enriched[signal.id][:500]
         signal_list.append(entry)
 
     return f"Here are today's signals to analyze:\n\n```json\n{json.dumps(signal_list, indent=2)}\n```"
@@ -144,7 +154,9 @@ def score_opportunities(
     from app.backend.services.feedback_service import build_feedback_prompt_context
     feedback_context = build_feedback_prompt_context(db, campaign.id)
 
-    system_prompt = _build_scoring_system_prompt(campaign, topics, feedback_context=feedback_context)
+    stable_block, campaign_block = _build_scoring_system_blocks(
+        campaign, topics, feedback_context=feedback_context
+    )
     user_prompt = _build_scoring_user_prompt(signals, enriched_content=enriched_content)
 
     enriched_count = sum(1 for s in signals if enriched_content and s.id in enriched_content)
@@ -154,15 +166,26 @@ def score_opportunities(
         enriched_count,
     )
 
+    # Two-block system prompt:
+    # - stable_block carries guardrails + personality + scoring rules. Identical for
+    #   every scoring call, marked cache_control: ephemeral so it's served from the
+    #   prompt cache after the first call (90% input-token discount).
+    # - campaign_block carries the per-campaign context. Small enough that not
+    #   caching it is fine. Order matters: stable first, then campaign — the cache
+    #   only covers the prefix up to the cache breakpoint.
     response = client.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=1600,
         system=[
             {
                 "type": "text",
-                "text": system_prompt,
+                "text": stable_block,
                 "cache_control": {"type": "ephemeral"},
-            }
+            },
+            {
+                "type": "text",
+                "text": campaign_block,
+            },
         ],
         messages=[{"role": "user", "content": user_prompt}],
     )
