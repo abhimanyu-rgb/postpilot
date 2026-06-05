@@ -132,6 +132,23 @@ def check_draft_drift(
     return result or {"has_drift": False}
 
 
+@router.get("/{draft_id}/repetition-check")
+def check_draft_repetition(
+    draft_id: int,
+    db: Session = Depends(get_db),
+):
+    """Check if a draft over-repeats a point already made in recent posts."""
+    draft = db.query(draft_review_service.Draft).filter(
+        draft_review_service.Draft.id == draft_id
+    ).first()
+    if not draft:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Draft not found")
+    from app.backend.services.voice_memory import check_repetition
+    result = check_repetition(db, draft.primary_text)
+    return result or {"has_repetition": False}
+
+
 @router.post("/{draft_id}/revert")
 def revert_to_review(
     draft_id: int,

@@ -204,6 +204,99 @@ Only flag genuine contradictions or significant stance changes. Topic variety ac
         return None
 
 
+def check_repetition(db: Session, draft_text: str) -> dict | None:
+    """Check if a draft over-repeats a point the author has made recently.
+
+    Mirror of check_drift but for the opposite failure mode: drift catches
+    contradictions; this catches saying the same thing too many times.
+
+    Returns None if no over-repetition, or:
+    {
+        "has_repetition": True,
+        "severity": "low" | "medium" | "high",
+        "explanation": "You've made this point in 3 of your last 5 posts...",
+        "similar_count": 3,
+    }
+    """
+    config = db.query(IntegrationConfig).filter(IntegrationConfig.id == 1).first()
+    if not config or not config.voice_snapshot:
+        return None
+
+    # Pull recent published posts (last 30d) — we need actual texts, not just the snapshot,
+    # so we can count how many times a point was made and cite specifics.
+    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+    recent_posts = (
+        db.query(PublishedPost)
+        .filter(PublishedPost.published_at >= cutoff)
+        .order_by(PublishedPost.published_at.desc())
+        .limit(10)
+        .all()
+    )
+    if len(recent_posts) < 2:
+        return None  # Need at least 2 prior posts for repetition to be meaningful
+
+    draft_ids = [p.draft_id for p in recent_posts]
+    drafts_by_id = {
+        d.id: d for d in db.query(Draft).filter(Draft.id.in_(draft_ids)).all()
+    }
+    blocks = []
+    for pp in recent_posts:
+        d = drafts_by_id.get(pp.draft_id)
+        if d and d.primary_text:
+            date_str = pp.published_at.date().isoformat() if pp.published_at else "?"
+            blocks.append(f"[{date_str}] {d.primary_text[:280]}")
+    if len(blocks) < 2:
+        return None
+
+    try:
+        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        prior_block = "\n---\n".join(blocks)
+
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=300,
+            messages=[{
+                "role": "user",
+                "content": f"""You audit a LinkedIn author's drafts for over-repetition. A point is over-repeated if the same core argument, framing, or insight has been made in multiple recent posts and showing up again risks fatiguing the audience.
+
+NEW DRAFT:
+{draft_text[:600]}
+
+AUTHOR'S RECENT POSTS (last 30 days, newest first):
+{prior_block}
+
+Respond with ONLY a JSON object:
+- If the draft introduces a fresh angle or topic: {{"has_repetition": false}}
+- If the draft repeats a point already made: {{"has_repetition": true, "severity": "low|medium|high", "similar_count": <how many recent posts make the same point>, "explanation": "<one sentence: the point being repeated + a brief quote from the prior post>"}}
+
+Severity guide:
+- low: similar theme, different framing — only flag if it's already appeared twice
+- medium: same point, slightly different wording, appeared 2 times before
+- high: nearly identical argument, appeared 3+ times — strong fatigue risk
+
+Topic variety across campaigns is normal — only flag when the SAME claim/insight is being recycled. Cross-campaign repetition counts too.""",
+            }],
+        )
+
+        text = response.content[0].text.strip()
+        if text.startswith("```"):
+            text = "\n".join(text.split("\n")[1:])
+            if text.endswith("```"):
+                text = text[:-3]
+        result = json.loads(text)
+
+        from app.backend.services.token_tracker import track_usage
+        track_usage(response, service="repetition_check")
+
+        if result.get("has_repetition"):
+            return result
+        return None
+
+    except Exception as e:
+        logger.debug("Repetition check failed: %s", e)
+        return None
+
+
 def _summarize_engagement_patterns(db: Session, top_n: int = 5) -> dict | None:
     """Pull top and bottom performers from post_analytics, with their post text.
 

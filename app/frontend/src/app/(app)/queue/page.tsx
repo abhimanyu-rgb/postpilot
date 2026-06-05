@@ -78,6 +78,7 @@ export default function QueuePage() {
 
   // Drift check state
   const [driftResults, setDriftResults] = useState<Record<number, { has_drift: boolean; severity?: string; explanation?: string }>>({});
+  const [repetitionResults, setRepetitionResults] = useState<Record<number, { has_repetition: boolean; severity?: string; explanation?: string; similar_count?: number }>>({});
   const [dupResults, setDupResults] = useState<Record<number, { has_overlap: boolean; similarity?: number; similar_headline?: string; published_date?: string }>>({});
 
   // Media state
@@ -99,6 +100,11 @@ export default function QueuePage() {
             `/api/drafts/${d.id}/drift-check`
           ).then((result) => {
             if (result.has_drift) setDriftResults((prev) => ({ ...prev, [d.id]: result }));
+          }).catch(() => {});
+          api.get<{ has_repetition: boolean; severity?: string; explanation?: string; similar_count?: number }>(
+            `/api/drafts/${d.id}/repetition-check`
+          ).then((result) => {
+            if (result.has_repetition) setRepetitionResults((prev) => ({ ...prev, [d.id]: result }));
           }).catch(() => {});
           api.get<{ has_overlap: boolean; similarity?: number; similar_headline?: string; published_date?: string }>(
             `/api/drafts/${d.id}/duplicate-check`
@@ -521,6 +527,43 @@ export default function QueuePage() {
                         driftResults[draft.id].severity === "medium" ? "text-amber-600" : "text-sky-600"
                       }`}>
                         {driftResults[draft.id].explanation}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Over-repetition warning */}
+                {repetitionResults[draft.id]?.has_repetition && (
+                  <div className={`mx-5 mb-3 rounded-lg px-4 py-2.5 flex items-start gap-2.5 animate-fade-in ${
+                    repetitionResults[draft.id].severity === "high"
+                      ? "bg-rose-50 border border-rose-200"
+                      : repetitionResults[draft.id].severity === "medium"
+                      ? "bg-amber-50 border border-amber-200"
+                      : "bg-sky-50 border border-sky-200"
+                  }`}>
+                    <div className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 mt-0.5 ${
+                      repetitionResults[draft.id].severity === "high" ? "bg-rose-100" :
+                      repetitionResults[draft.id].severity === "medium" ? "bg-amber-100" : "bg-sky-100"
+                    }`}>
+                      <svg className={`w-3.5 h-3.5 ${
+                        repetitionResults[draft.id].severity === "high" ? "text-rose-600" :
+                        repetitionResults[draft.id].severity === "medium" ? "text-amber-600" : "text-sky-600"
+                      }`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className={`text-xs font-medium ${
+                        repetitionResults[draft.id].severity === "high" ? "text-rose-800" :
+                        repetitionResults[draft.id].severity === "medium" ? "text-amber-800" : "text-sky-800"
+                      }`}>
+                        Repeating a recent point ({repetitionResults[draft.id].severity}{repetitionResults[draft.id].similar_count ? ` · ${repetitionResults[draft.id].similar_count} prior posts` : ""})
+                      </p>
+                      <p className={`text-[11px] mt-0.5 ${
+                        repetitionResults[draft.id].severity === "high" ? "text-rose-600" :
+                        repetitionResults[draft.id].severity === "medium" ? "text-amber-600" : "text-sky-600"
+                      }`}>
+                        {repetitionResults[draft.id].explanation}
                       </p>
                     </div>
                   </div>
