@@ -222,14 +222,13 @@ def check_repetition(db: Session, draft_text: str) -> dict | None:
     if not config or not config.voice_snapshot:
         return None
 
-    # Pull recent published posts (last 30d) — we need actual texts, not just the snapshot,
-    # so we can count how many times a point was made and cite specifics.
+    # Pull every published post in the last 30 days — we need actual texts, not just
+    # the snapshot, so we can count how many times a point was made and cite specifics.
     cutoff = datetime.now(timezone.utc) - timedelta(days=30)
     recent_posts = (
         db.query(PublishedPost)
         .filter(PublishedPost.published_at >= cutoff)
         .order_by(PublishedPost.published_at.desc())
-        .limit(10)
         .all()
     )
     if len(recent_posts) < 2:
