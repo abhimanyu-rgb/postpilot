@@ -57,6 +57,45 @@ interface RefreshResult {
   skipped_already_scraped_today: number;
 }
 
+interface CampaignBreakdown {
+  campaign_id: number;
+  campaign_name: string;
+  campaign_status: string;
+  rejected: number;
+  approved: number;
+  total: number;
+  rejection_rate: number;
+  top_reasons: Record<string, number>;
+  is_high_rejection: boolean;
+}
+
+interface RejectionAggregate {
+  window_days: number;
+  window_start: string;
+  window_end: string;
+  total_rejected: number;
+  total_approved: number;
+  rejection_rate_overall: number;
+  reasons: Record<string, number>;
+  tagged_share: number;
+  campaigns: CampaignBreakdown[];
+}
+
+interface Diagnosis {
+  headline: string;
+  diagnosis: string;
+  problem_campaigns: { campaign_id: number; campaign_name: string; issue: string }[];
+  problem_memory: { line: string; why: string }[];
+  recommendations: { action: string; detail: string }[];
+}
+
+interface RejectionInsights {
+  generated_at: string;
+  aggregate: RejectionAggregate;
+  diagnosis: Diagnosis | null;
+  min_rejections_required: number;
+}
+
 function formatDateShort(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -148,6 +187,8 @@ export default function AnalyticsPage() {
   const [refreshResult, setRefreshResult] = useState<RefreshResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set());
+  const [rejectionInsights, setRejectionInsights] = useState<RejectionInsights | null>(null);
+  const [loadingRejInsights, setLoadingRejInsights] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -167,6 +208,19 @@ export default function AnalyticsPage() {
   }
 
   useEffect(() => { load(); }, []);
+
+  async function loadRejectionInsights() {
+    setLoadingRejInsights(true);
+    try {
+      const r = await api.get<RejectionInsights>("/api/analytics/rejection-insights");
+      setRejectionInsights(r);
+    } catch (e: unknown) {
+      const err = e as { body?: { detail?: string }; message?: string };
+      alert(err?.body?.detail || err?.message || "Insights failed");
+    } finally {
+      setLoadingRejInsights(false);
+    }
+  }
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -302,6 +356,159 @@ export default function AnalyticsPage() {
           </div>
         </div>
       )}
+
+      {/* Monthly rejection insights */}
+      <div className="mt-6 rounded-xl border border-violet-200/50 bg-gradient-to-br from-violet-50/30 to-indigo-50/20 shadow-sm">
+        <div className="px-4 py-3 border-b border-violet-100/50 flex items-center justify-between">
+          <div>
+            <h2 className="text-xs font-semibold text-violet-800 uppercase tracking-wide">Monthly Insights — rejection diagnostics</h2>
+            <p className="text-[10px] text-violet-600/80 mt-0.5">Spot patterns in why drafts get rejected — repetition fatigue, exhausted campaigns, memory bloat.</p>
+          </div>
+          <button
+            onClick={loadRejectionInsights}
+            disabled={loadingRejInsights}
+            className="rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-[11px] font-medium text-violet-700 hover:bg-violet-50 disabled:opacity-50 flex items-center gap-1.5"
+          >
+            {loadingRejInsights ? (
+              <div className="animate-spin w-3 h-3 border border-violet-600 border-t-transparent rounded-full" />
+            ) : (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+            )}
+            {rejectionInsights ? "Regenerate" : "Generate insights"}
+          </button>
+        </div>
+
+        {rejectionInsights ? (
+          <div className="p-4 space-y-4">
+            {/* Aggregate stats — always shown */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              <div className="rounded-lg bg-white border border-violet-100 p-3">
+                <p className="text-[9px] text-gray-400 uppercase tracking-wide">Rejected</p>
+                <p className="text-xl font-bold text-gray-900 mt-0.5">{rejectionInsights.aggregate.total_rejected}</p>
+                <p className="text-[10px] text-gray-400">over {rejectionInsights.aggregate.window_days}d</p>
+              </div>
+              <div className="rounded-lg bg-white border border-violet-100 p-3">
+                <p className="text-[9px] text-gray-400 uppercase tracking-wide">Rejection rate</p>
+                <p className="text-xl font-bold text-gray-900 mt-0.5">{Math.round(rejectionInsights.aggregate.rejection_rate_overall * 100)}%</p>
+                <p className="text-[10px] text-gray-400">{rejectionInsights.aggregate.total_approved} approved</p>
+              </div>
+              <div className="rounded-lg bg-white border border-violet-100 p-3">
+                <p className="text-[9px] text-gray-400 uppercase tracking-wide">Tagged</p>
+                <p className="text-xl font-bold text-gray-900 mt-0.5">{Math.round(rejectionInsights.aggregate.tagged_share * 100)}%</p>
+                <p className="text-[10px] text-gray-400">structured reasons</p>
+              </div>
+              <div className="rounded-lg bg-white border border-violet-100 p-3">
+                <p className="text-[9px] text-gray-400 uppercase tracking-wide">Top reason</p>
+                <p className="text-xs font-semibold text-gray-900 mt-1 capitalize">
+                  {Object.entries(rejectionInsights.aggregate.reasons).sort((a, b) => b[1] - a[1])[0]?.[0].replace(/_/g, " ") || "—"}
+                </p>
+                <p className="text-[10px] text-gray-400">
+                  {Object.entries(rejectionInsights.aggregate.reasons).sort((a, b) => b[1] - a[1])[0]?.[1] || 0} rejections
+                </p>
+              </div>
+            </div>
+
+            {/* Diagnosis from Claude */}
+            {rejectionInsights.diagnosis ? (
+              <div className="rounded-lg bg-white border border-violet-200 p-4">
+                <p className="text-xs font-semibold text-violet-900">{rejectionInsights.diagnosis.headline}</p>
+                <p className="text-[11px] text-gray-700 mt-1.5 leading-relaxed">{rejectionInsights.diagnosis.diagnosis}</p>
+
+                {rejectionInsights.diagnosis.problem_campaigns.length > 0 && (
+                  <div className="mt-3">
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1">Problem campaigns</p>
+                    <div className="space-y-1">
+                      {rejectionInsights.diagnosis.problem_campaigns.map((pc) => (
+                        <div key={pc.campaign_id} className="flex items-center gap-2 text-[11px]">
+                          <span className="font-medium text-gray-900">{pc.campaign_name}</span>
+                          <span className="text-gray-500">— {pc.issue}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {rejectionInsights.diagnosis.problem_memory.length > 0 && (
+                  <div className="mt-3">
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1">Memory lines worth reviewing</p>
+                    <div className="space-y-1">
+                      {rejectionInsights.diagnosis.problem_memory.map((pm, i) => (
+                        <div key={i} className="text-[11px]">
+                          <code className="text-violet-700 bg-violet-50 px-1 py-0.5 rounded font-mono text-[10px]">{pm.line}</code>
+                          <span className="text-gray-500 ml-1.5">— {pm.why}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {rejectionInsights.diagnosis.recommendations.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-violet-100">
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1.5">Recommended actions</p>
+                    <div className="space-y-1.5">
+                      {rejectionInsights.diagnosis.recommendations.map((rec, i) => (
+                        <div key={i} className="flex items-start gap-2 text-[11px]">
+                          <span className="rounded px-1.5 py-0.5 bg-violet-100 text-violet-700 text-[9px] font-semibold uppercase tracking-wide whitespace-nowrap mt-0.5">{rec.action.replace(/_/g, " ")}</span>
+                          <span className="text-gray-700 leading-relaxed">{rec.detail}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : rejectionInsights.aggregate.total_rejected < rejectionInsights.min_rejections_required ? (
+              <div className="rounded-lg bg-amber-50/50 border border-amber-200 px-3 py-2.5 text-[11px] text-amber-700">
+                Need at least {rejectionInsights.min_rejections_required} tagged rejections in the window to generate a diagnosis. Currently {rejectionInsights.aggregate.total_rejected}.
+              </div>
+            ) : (
+              <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2.5 text-[11px] text-gray-500">
+                Diagnosis unavailable. Try Regenerate.
+              </div>
+            )}
+
+            {/* Per-campaign table */}
+            {rejectionInsights.aggregate.campaigns.length > 0 && (
+              <div className="rounded-lg bg-white border border-violet-100 overflow-hidden">
+                <div className="px-3 py-2 border-b border-violet-100 bg-violet-50/30">
+                  <p className="text-[10px] font-semibold text-violet-800 uppercase tracking-wide">Per-campaign breakdown</p>
+                </div>
+                <table className="w-full text-[11px]">
+                  <thead className="bg-gray-50/50">
+                    <tr className="border-b border-gray-100">
+                      <th className="text-left font-medium text-gray-500 px-3 py-1.5">Campaign</th>
+                      <th className="text-center font-medium text-gray-500 px-2 py-1.5">Total</th>
+                      <th className="text-center font-medium text-gray-500 px-2 py-1.5">Rate</th>
+                      <th className="text-left font-medium text-gray-500 px-2 py-1.5">Top reason</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rejectionInsights.aggregate.campaigns.map((c) => {
+                      const topReason = Object.entries(c.top_reasons).sort((a, b) => b[1] - a[1])[0];
+                      return (
+                        <tr key={c.campaign_id} className={`border-b border-gray-50 ${c.is_high_rejection ? "bg-rose-50/30" : ""}`}>
+                          <td className="px-3 py-1.5 font-medium text-gray-800">{c.campaign_name}</td>
+                          <td className="px-2 py-1.5 text-center text-gray-600">{c.total}</td>
+                          <td className={`px-2 py-1.5 text-center font-semibold ${c.is_high_rejection ? "text-rose-700" : "text-gray-700"}`}>
+                            {Math.round(c.rejection_rate * 100)}%
+                          </td>
+                          <td className="px-2 py-1.5 text-gray-500 capitalize">{topReason ? `${topReason[0].replace(/_/g, " ")} (${topReason[1]})` : "—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <p className="text-[9px] text-gray-400 text-right">Generated {new Date(rejectionInsights.generated_at).toLocaleString()}</p>
+          </div>
+        ) : (
+          <div className="p-6 text-center">
+            <p className="text-xs text-gray-500">Click <strong>Generate insights</strong> to analyze the last 30 days of rejection patterns.</p>
+            <p className="text-[10px] text-gray-400 mt-1">Uses one Claude call (~$0.01).</p>
+          </div>
+        )}
+      </div>
 
       {/* Week-grouped table */}
       <div className="mt-6 rounded-xl border border-indigo-100/50 bg-white shadow-sm overflow-hidden">

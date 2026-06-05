@@ -69,10 +69,16 @@ def approve_draft(
 def reject_draft(
     draft_id: int,
     reason: str = Query(default=""),
+    rejection_reason: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
-    """Reject a draft."""
-    return draft_review_service.reject_draft(db, draft_id, reason)
+    """Reject a draft.
+
+    `rejection_reason` is one of the structured tags: repetitive | drift |
+    off_topic | poor_hook | other. Required for diagnostic insights; the
+    legacy `reason` query param is kept for free-text notes.
+    """
+    return draft_review_service.reject_draft(db, draft_id, reason, rejection_reason)
 
 
 @router.get("/{draft_id}/duplicate-check")

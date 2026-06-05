@@ -48,3 +48,10 @@ def promote_insight(insight_id: int, db: Session = Depends(get_db)):
 def reject_insight(insight_id: int, db: Session = Depends(get_db)):
     """Dismiss an insight."""
     return analytics_service.reject_insight(db, insight_id)
+
+
+@router.get("/rejection-insights")
+def get_rejection_insights(db: Session = Depends(get_db)):
+    """30-day diagnostic insights from rejection patterns + Claude-generated recommendations."""
+    from app.backend.services.insights_service import generate_insights
+    return generate_insights(db)

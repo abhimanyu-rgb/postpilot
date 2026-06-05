@@ -192,11 +192,17 @@ export default function QueuePage() {
     }
   }
 
-  async function handleReject(id: number) {
-    if (!confirm("Reject this draft? It will move to history.")) return;
+  const [rejectingId, setRejectingId] = useState<number | null>(null);
+
+  function openRejectModal(id: number) {
+    setRejectingId(id);
+  }
+
+  async function confirmReject(id: number, tag: "repetitive" | "drift" | "off_topic" | "poor_hook" | "other") {
+    setRejectingId(null);
     setActionLoading(id);
     try {
-      await api.post(`/api/drafts/${id}/reject`);
+      await api.post(`/api/drafts/${id}/reject?rejection_reason=${tag}`);
       setDrafts((prev) => prev.filter((d) => d.id !== id));
     } catch (e: unknown) {
       const err = e as { body?: { detail?: string }; message?: string };
@@ -986,7 +992,7 @@ export default function QueuePage() {
                     {activeTab === "pending_review" ? (
                       <>
                         <button
-                          onClick={() => handleReject(draft.id)}
+                          onClick={() => openRejectModal(draft.id)}
                           disabled={isActing}
                           className="rounded-lg border border-gray-300 px-4 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-50 flex items-center gap-1.5"
                         >
@@ -1013,7 +1019,7 @@ export default function QueuePage() {
                     ) : (
                       <>
                         <button
-                          onClick={() => handleReject(draft.id)}
+                          onClick={() => openRejectModal(draft.id)}
                           disabled={isActing}
                           className="rounded-lg border border-gray-300 px-4 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-50 flex items-center gap-1.5"
                           title="Reject this draft — moves to history"
@@ -1047,6 +1053,48 @@ export default function QueuePage() {
           })}
         </div>
       )}
+
+      {/* Reject reason modal */}
+      {rejectingId !== null && (() => {
+        const id = rejectingId;
+        const suggested: "repetitive" | "drift" | "off_topic" | "poor_hook" | "other" =
+          repetitionResults[id]?.has_repetition ? "repetitive"
+          : driftResults[id]?.has_drift ? "drift"
+          : "other";
+        const tags: { tag: "repetitive" | "drift" | "off_topic" | "poor_hook" | "other"; label: string; description: string }[] = [
+          { tag: "repetitive", label: "Repetitive", description: "Repeats a recent point" },
+          { tag: "drift", label: "Drift", description: "Contradicts a recent position" },
+          { tag: "off_topic", label: "Off-topic", description: "Doesn't fit the campaign" },
+          { tag: "poor_hook", label: "Poor hook", description: "Opening doesn't land" },
+          { tag: "other", label: "Other", description: "Something else" },
+        ];
+        return (
+          <div className="fixed inset-0 bg-gray-900/40 flex items-center justify-center z-50 p-4" onClick={() => setRejectingId(null)}>
+            <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-5" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-sm font-semibold text-gray-900 mb-1">Why reject?</h3>
+              <p className="text-[11px] text-gray-500 mb-4">Tagging helps PostPilot diagnose patterns in monthly insights.</p>
+              <div className="space-y-1.5">
+                {tags.map(({ tag, label, description }) => (
+                  <button
+                    key={tag}
+                    onClick={() => confirmReject(id, tag)}
+                    className={`w-full text-left rounded-lg border px-3 py-2 hover:border-violet-300 hover:bg-violet-50/40 transition ${
+                      tag === suggested ? "border-violet-400 bg-violet-50/60" : "border-gray-200 bg-white"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-medium text-gray-900">{label}</p>
+                      {tag === suggested && <span className="text-[9px] font-semibold text-violet-600 uppercase tracking-wide">suggested</span>}
+                    </div>
+                    <p className="text-[10px] text-gray-500 mt-0.5">{description}</p>
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => setRejectingId(null)} className="mt-4 text-[10px] text-gray-400 hover:text-gray-600">Cancel</button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

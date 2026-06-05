@@ -190,8 +190,11 @@ def approve_draft(db: Session, draft_id: int) -> dict:
     }
 
 
-def reject_draft(db: Session, draft_id: int, reason: str = "") -> dict:
-    """Reject a draft."""
+VALID_REJECTION_REASONS = {"repetitive", "drift", "off_topic", "poor_hook", "other"}
+
+
+def reject_draft(db: Session, draft_id: int, reason: str = "", rejection_reason: str | None = None) -> dict:
+    """Reject a draft. `rejection_reason` is a structured tag for diagnostic insights."""
     draft = db.query(Draft).filter(Draft.id == draft_id).first()
     if not draft:
         raise HTTPException(status_code=404, detail="Draft not found")
@@ -200,16 +203,21 @@ def reject_draft(db: Session, draft_id: int, reason: str = "") -> dict:
 
     draft.status = "rejected"
 
+    normalized_reason = (rejection_reason or "").strip().lower() or None
+    if normalized_reason and normalized_reason not in VALID_REJECTION_REASONS:
+        normalized_reason = "other"
+
     action = ApprovalAction(
         draft_id=draft.id,
         action_type="rejected",
         source_surface="web",
         action_note=reason or None,
+        rejection_reason=normalized_reason,
     )
     db.add(action)
     db.commit()
-    logger.info("Draft %d rejected", draft_id)
-    return {"id": draft.id, "status": "rejected"}
+    logger.info("Draft %d rejected (reason=%s)", draft_id, normalized_reason)
+    return {"id": draft.id, "status": "rejected", "rejection_reason": normalized_reason}
 
 
 def update_draft_text(db: Session, draft_id: int, new_text: str) -> dict:

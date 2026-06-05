@@ -12,3 +12,5 @@ class ApprovalAction(Base, IdMixin, TimestampMixin):
     action_type: Mapped[str] = mapped_column(String, nullable=False)
     source_surface: Mapped[str] = mapped_column(String, nullable=False)
     action_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # One of: 'repetitive', 'drift', 'off_topic', 'poor_hook', 'other'. Only set when action_type='rejected'.
+    rejection_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
