@@ -9,6 +9,8 @@ interface CampaignListData { campaigns: Campaign[]; active_count: number; max_ac
 interface TokenStats {
   week: { calls: number; total_tokens: number; estimated_cost_usd: number };
   month: { calls: number; total_tokens: number; estimated_cost_usd: number; by_service: Record<string, number> };
+  ytd: { calls: number; total_tokens: number; estimated_cost_usd: number };
+  ytd_year: number;
 }
 interface PublishQueueStatus { posts_today: number; daily_budget: number; remaining: number; approved_waiting: number; queued_for_publish: number; paused: boolean; }
 
@@ -353,7 +355,7 @@ export default function DashboardPage() {
               <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Token Usage</h2>
             </div>
             <div className="p-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+              <div className="grid grid-cols-3 gap-3 mb-3">
                 <div>
                   <p className="text-[10px] text-gray-400">This week</p>
                   <p className="text-lg font-bold text-gray-900">{fmt(tokenStats.week.total_tokens)}</p>
@@ -363,6 +365,11 @@ export default function DashboardPage() {
                   <p className="text-[10px] text-gray-400">This month</p>
                   <p className="text-lg font-bold text-gray-900">{fmt(tokenStats.month.total_tokens)}</p>
                   <p className="text-[10px] text-gray-400">${tokenStats.month.estimated_cost_usd.toFixed(2)}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-gray-400">YTD {tokenStats.ytd_year}</p>
+                  <p className="text-lg font-bold text-gray-900">{fmt(tokenStats.ytd.total_tokens)}</p>
+                  <p className="text-[10px] text-gray-400">${tokenStats.ytd.estimated_cost_usd.toFixed(2)}</p>
                 </div>
               </div>
               {Object.keys(tokenStats.month.by_service).length > 0 && (

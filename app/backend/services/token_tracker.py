@@ -80,13 +80,15 @@ def track_usage(
 
 
 def get_usage_stats(db: Session) -> dict:
-    """Get token usage aggregated by week and month for the dashboard."""
+    """Get token usage aggregated by week, month, year-to-date, and all-time."""
     now = datetime.now(timezone.utc)
     week_ago = now - timedelta(days=7)
     month_ago = now - timedelta(days=30)
+    year_start = datetime(now.year, 1, 1, tzinfo=timezone.utc)
 
     week_records = db.query(TokenUsage).filter(TokenUsage.created_at >= week_ago).all()
     month_records = db.query(TokenUsage).filter(TokenUsage.created_at >= month_ago).all()
+    ytd_records = db.query(TokenUsage).filter(TokenUsage.created_at >= year_start).all()
     all_records = db.query(TokenUsage).all()
 
     def _aggregate(records: list[TokenUsage]) -> dict:
@@ -110,5 +112,7 @@ def get_usage_stats(db: Session) -> dict:
     return {
         "week": _aggregate(week_records),
         "month": _aggregate(month_records),
+        "ytd": _aggregate(ytd_records),
+        "ytd_year": now.year,
         "all_time": _aggregate(all_records),
     }
