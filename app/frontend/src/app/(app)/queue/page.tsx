@@ -86,6 +86,8 @@ export default function QueuePage() {
   const [mediaSuggestions, setMediaSuggestions] = useState<MediaSuggestion[]>([]);
   const [mediaLoading, setMediaLoading] = useState(false);
   const [selectedMedia, setSelectedMedia] = useState<Set<string>>(new Set());
+  const [manualUrl, setManualUrl] = useState("");
+  const [manualUrlError, setManualUrlError] = useState<string | null>(null);
 
   const loadDrafts = useCallback(async (tab: QueueTab) => {
     setLoading(true);
@@ -386,6 +388,23 @@ export default function QueuePage() {
       else next.add(url);
       return next;
     });
+  }
+
+  function addManualUrl() {
+    const raw = manualUrl.trim();
+    if (!raw) return;
+    let normalized = raw;
+    if (!/^https?:\/\//i.test(normalized)) normalized = "https://" + normalized;
+    try {
+      const u = new URL(normalized);
+      if (!u.hostname.includes(".")) throw new Error("bad host");
+    } catch {
+      setManualUrlError("Enter a valid URL (e.g. https://example.com/article)");
+      return;
+    }
+    setSelectedMedia((prev) => new Set(prev).add(normalized));
+    setManualUrl("");
+    setManualUrlError(null);
   }
 
   async function handleGenerateFromCandidate(candidateId: number) {
@@ -879,11 +898,56 @@ export default function QueuePage() {
 
                   {mediaForId === draft.id && !mediaLoading && (
                     <div className="mt-2 space-y-2 animate-fade-in">
+                      {/* Manual URL input — always shown, works even with zero suggestions */}
+                      <div className="rounded-lg border border-gray-200 bg-white px-3 py-2">
+                        <p className="text-[10px] text-gray-500 mb-1.5">Add your own link or image URL:</p>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="url"
+                            value={manualUrl}
+                            onChange={(e) => { setManualUrl(e.target.value); setManualUrlError(null); }}
+                            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addManualUrl(); } }}
+                            placeholder="https://example.com/article-or-image.jpg"
+                            className="flex-1 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-gray-800 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500/20"
+                          />
+                          <button
+                            type="button"
+                            onClick={addManualUrl}
+                            className="rounded-md bg-indigo-600 px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-indigo-700 shrink-0"
+                          >
+                            Attach
+                          </button>
+                        </div>
+                        {manualUrlError && (
+                          <p className="text-[10px] text-rose-500 mt-1">{manualUrlError}</p>
+                        )}
+                        {/* Selected manual URLs (not in mediaSuggestions) */}
+                        {Array.from(selectedMedia).filter((u) => !mediaSuggestions.some((m) => m.url === u)).length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {Array.from(selectedMedia)
+                              .filter((u) => !mediaSuggestions.some((m) => m.url === u))
+                              .map((u) => (
+                                <span key={u} className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] text-indigo-700 max-w-full">
+                                  <svg className="w-2.5 h-2.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                                  <span className="truncate max-w-[220px]">{u}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleMedia(u)}
+                                    className="text-indigo-400 hover:text-indigo-700 shrink-0"
+                                    title="Remove"
+                                  >
+                                    <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                                  </button>
+                                </span>
+                              ))}
+                          </div>
+                        )}
+                      </div>
                       {mediaSuggestions.length === 0 ? (
-                        <p className="text-xs text-gray-400 py-2">No media found from source articles.</p>
+                        <p className="text-xs text-gray-400 py-2">No media found from source articles. Attach your own link above.</p>
                       ) : (
                         <>
-                          <p className="text-[10px] text-gray-400">Select media to include with your post:</p>
+                          <p className="text-[10px] text-gray-400">Or select from suggestions:</p>
                           <div className="grid grid-cols-2 gap-2">
                             {mediaSuggestions.filter((m) => m.type === "image").map((media) => (
                               <button
