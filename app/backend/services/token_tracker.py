@@ -18,13 +18,13 @@ logger = logging.getLogger("orchestrator")
 
 # Pricing per million tokens (as of 2025)
 PRICING = {
-    "claude-sonnet-4-20250514": {
+    "claude-sonnet-4-6": {
         "input": 3.0 / 1_000_000,
         "output": 15.0 / 1_000_000,
         "cache_read": 0.30 / 1_000_000,
         "cache_creation": 3.75 / 1_000_000,
     },
-    "claude-haiku-4-5-20251001": {
+    "claude-haiku-4-5": {
         "input": 0.80 / 1_000_000,
         "output": 4.0 / 1_000_000,
         "cache_read": 0.08 / 1_000_000,
@@ -37,7 +37,7 @@ DEFAULT_PRICING = {"input": 3.0 / 1_000_000, "output": 15.0 / 1_000_000, "cache_
 def track_usage(
     response: anthropic.types.Message,
     service: str,
-    model: str = "claude-sonnet-4-20250514",
+    model: str = "claude-sonnet-4-6",
     campaign_id: int | None = None,
     draft_id: int | None = None,
 ) -> None:

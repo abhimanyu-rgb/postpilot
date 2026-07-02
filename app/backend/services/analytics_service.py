@@ -157,7 +157,7 @@ Return ONLY a JSON object:
 
     try:
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-6",
             max_tokens=600,
             messages=[{"role": "user", "content": user_prompt}],
         )

@@ -151,7 +151,7 @@ If the aggregate is genuinely healthy (rejection rate low or evenly distributed)
     try:
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
         response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-haiku-4-5",
             max_tokens=900,
             messages=[{"role": "user", "content": prompt}],
         )

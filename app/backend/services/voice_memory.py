@@ -110,7 +110,7 @@ def update_voice_snapshot(db: Session) -> None:
         posts_block = "\n---\n".join(annotated_posts)
 
         response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-haiku-4-5",
             max_tokens=600,
             messages=[{
                 "role": "user",
@@ -177,7 +177,7 @@ def _run_audit_call(prompt: str, service_label: str) -> dict | None:
     try:
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
         response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-haiku-4-5",
             max_tokens=300,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -391,7 +391,7 @@ def analyze_personality_evolution(db: Session) -> dict | None:
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
         current_profile = config.personality_prompt or ""
         response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-haiku-4-5",
             max_tokens=600,
             messages=[{
                 "role": "user",

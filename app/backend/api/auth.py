@@ -78,16 +78,16 @@ async def linkedin_auth_callback(
     if error:
         logger.error("LinkedIn OAuth error: %s — %s", error, error_description)
         return RedirectResponse(
-            url=f"http://localhost:3001/setup?error={error_description or error}"
+            url=f"http://localhost:3000/setup?error={error_description or error}"
         )
 
     # CSRF check
     if not state or state not in _oauth_states:
-        return RedirectResponse(url="http://localhost:3001/setup?error=Invalid+state+parameter")
+        return RedirectResponse(url="http://localhost:3000/setup?error=Invalid+state+parameter")
     _oauth_states.discard(state)
 
     if not code:
-        return RedirectResponse(url="http://localhost:3001/setup?error=No+authorization+code")
+        return RedirectResponse(url="http://localhost:3000/setup?error=No+authorization+code")
 
     # Exchange code for tokens
     try:
@@ -108,7 +108,7 @@ async def linkedin_auth_callback(
         if resp.status_code != 200:
             logger.error("LinkedIn token exchange failed: %s %s", resp.status_code, resp.text[:300])
             return RedirectResponse(
-                url=f"http://localhost:3001/setup?error=Token+exchange+failed+({resp.status_code})"
+                url=f"http://localhost:3000/setup?error=Token+exchange+failed+({resp.status_code})"
             )
 
         token_data = resp.json()
@@ -117,7 +117,7 @@ async def linkedin_auth_callback(
 
     except Exception as e:
         logger.error("LinkedIn token exchange error: %s", e)
-        return RedirectResponse(url="http://localhost:3001/setup?error=Token+exchange+error")
+        return RedirectResponse(url="http://localhost:3000/setup?error=Token+exchange+error")
 
     # Fetch user profile to get person URN
     try:
@@ -130,7 +130,7 @@ async def linkedin_auth_callback(
 
         if profile_resp.status_code != 200:
             logger.error("LinkedIn userinfo failed: %s", profile_resp.status_code)
-            return RedirectResponse(url="http://localhost:3001/setup?error=Profile+fetch+failed")
+            return RedirectResponse(url="http://localhost:3000/setup?error=Profile+fetch+failed")
 
         profile = profile_resp.json()
         # sub field contains the person ID
@@ -140,7 +140,7 @@ async def linkedin_auth_callback(
 
     except Exception as e:
         logger.error("LinkedIn profile fetch error: %s", e)
-        return RedirectResponse(url="http://localhost:3001/setup?error=Profile+fetch+error")
+        return RedirectResponse(url="http://localhost:3000/setup?error=Profile+fetch+error")
 
     # Store tokens securely in .env (server-side only)
     store_secret(db, "LINKEDIN_ACCESS_TOKEN", access_token)
@@ -158,7 +158,7 @@ async def linkedin_auth_callback(
     _check_and_mark_complete(db)
 
     logger.info("LinkedIn OAuth completed for %s (%s)", user_name, person_urn)
-    return RedirectResponse(url=f"http://localhost:3001/setup?linkedin=connected&name={user_name}")
+    return RedirectResponse(url=f"http://localhost:3000/setup?linkedin=connected&name={user_name}")
 
 
 @router.get("/linkedin/status")
